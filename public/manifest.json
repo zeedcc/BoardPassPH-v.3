@@ -1,0 +1,24 @@
+{
+  "name": "BoardPassPH PmLE Exam Prep",
+  "short_name": "BoardPassPH",
+  "description": "Comprehensive prep portal for the Philippine Psychometrician Licensure Examination (PmLE), featuring DSM-5-TR mock tests, RPG tracking, and AI study tools.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1B3518",
+  "theme_color": "#1B3518",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
