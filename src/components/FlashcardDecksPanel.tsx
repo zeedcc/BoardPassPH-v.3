@@ -2347,16 +2347,28 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                       <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1.5">
                         Developer API Key Configuration
                       </label>
-                      <input
-                        type="text"
-                        value={deckApiKey}
-                        onChange={(e) => {
-                          setDeckApiKey(e.target.value);
-                          localStorage.setItem(`bp_gemini_api_key_${profile.email}`, e.target.value.trim());
-                        }}
-                        placeholder="Paste your Gemini AI Studio API Key here (AIzaSy...)"
-                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono outline-none focus:border-sage focus:ring-1 focus:ring-sage"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={deckApiKey}
+                          onChange={(e) => {
+                            setDeckApiKey(e.target.value);
+                            localStorage.setItem(`bp_gemini_api_key_${profile.email}`, e.target.value.trim());
+                          }}
+                          placeholder="Paste your Gemini AI Studio API Key here (AIzaSy...)"
+                          className="flex-grow bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono outline-none focus:border-sage focus:ring-1 focus:ring-sage"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            localStorage.setItem(`bp_gemini_api_key_${profile.email}`, deckApiKey.trim());
+                            alert("API Key saved successfully! The Deck Builder will now use your custom developer allocation limit.");
+                          }}
+                          className="px-4 py-2 bg-sage hover:bg-[#689f81] text-white text-xs font-bold rounded-xl transition shadow-sm whitespace-nowrap"
+                        >
+                          Save Key
+                        </button>
+                      </div>
                       <div className="mt-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
                         <p className="text-[11px] font-bold text-blue-900 mb-1">How to get your free Gemini API Key:</p>
                         <ol className="list-decimal list-inside text-[10px] text-blue-800 space-y-1">
