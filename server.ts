@@ -40,8 +40,10 @@ function getGemini(): GoogleGenAI | null {
 
 // REST end points for BoardPassPH AI engines
 app.post('/api/generate-question', async (req, res) => {
-  const { focusArea, source, difficulty, fileData, fileMimeType, history } = req.body;
-  const ai = getGemini();
+  const { focusArea, source, difficulty, fileData, fileMimeType, history, customApiKey } = req.body;
+  const ai = customApiKey && customApiKey.trim() !== '' 
+      ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }) 
+      : getGemini();
 
   if (!ai) {
     // Graceful fallback trigger
@@ -161,8 +163,10 @@ Format your output in clean Markdown with clear paragraph structure.`,
 });
 
 app.post('/api/generate-deck', async (req, res) => {
-  const { textPayload, fileContent, fileName, chunkIndex, totalChunks } = req.body;
-  const ai = getGemini();
+  const { textPayload, fileContent, fileName, chunkIndex, totalChunks, customApiKey } = req.body;
+  const ai = customApiKey && customApiKey.trim() !== '' 
+      ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }) 
+      : getGemini();
 
   if (!ai) {
     return res.json({ 

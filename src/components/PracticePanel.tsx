@@ -354,13 +354,15 @@ export const PracticePanel: React.FC<PracticePanelProps> = ({
     setLoadingMnemonic(true);
     setMnemonicText('');
     try {
+      const customKey = localStorage.getItem(`bp_gemini_api_key_${profile.email}`);
       const res = await fetch("/api/generate-mnemonic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vignette: currentQuestion.vignette,
           explanation: currentQuestion.explanation,
-          model: selectedModel
+          model: selectedModel,
+          customApiKey: customKey || ''
         })
       });
       const data = await res.json();
@@ -398,12 +400,19 @@ export const PracticePanel: React.FC<PracticePanelProps> = ({
 
   const dailyLimit = getDailyQuestionLimit(profile.tier);
   const questionsUsedToday = getQuestionsUsedToday(profile);
-  const atDailyLimit = dailyLimit !== null && questionsUsedToday >= dailyLimit;
+  const customApiKey = localStorage.getItem(`bp_gemini_api_key_${profile.email}`);
+  const hasCustomKey = !!customApiKey;
+  const atDailyLimit = !hasCustomKey && dailyLimit !== null && questionsUsedToday >= dailyLimit;
   const isLimitedPlan = isLimitedTier(profile.tier);
 
   return (
     <div className="space-y-6">
-      {isLimitedPlan && dailyLimit !== null && (
+      {hasCustomKey && (
+        <div className="rounded-2xl border px-4 py-3 text-xs font-semibold border-pine/30 bg-pine/5 text-pine">
+          Developer Mode Active — Custom API Key is bypassing daily AI question limits.
+        </div>
+      )}
+      {!hasCustomKey && isLimitedPlan && dailyLimit !== null && (
         <div className={`rounded-2xl border px-4 py-3 text-xs font-semibold ${atDailyLimit ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
           {profile.tier} plan: {questionsUsedToday} / {dailyLimit} AI questions used today
           {atDailyLimit ? ' — limit reached. Visit Plans to upgrade.' : ''}

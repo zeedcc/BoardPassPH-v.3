@@ -21,6 +21,10 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
   const [photo, setPhoto] = useState(profile.photo || '🧠');
   const [isEditing, setIsEditing] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [customApiKey, setCustomApiKey] = useState(() => {
+    return localStorage.getItem(`bp_gemini_api_key_${profile.email}`) || '';
+  });
+  const [isEditingKey, setIsEditingKey] = useState(false);
 
   const toggleReminder = () => {
     setProfile(prev => {
@@ -416,6 +420,88 @@ export const ProfilePanel: React.FC<ProfilePanelProps> = ({
               </button>
             );
           })}
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-sm space-y-4 select-none">
+        <h4 className="font-heading font-black text-pine text-xs uppercase tracking-widest flex items-center gap-1.5 border-b border-gray-100 pb-2.5">
+          <Key className="w-4 h-4 text-sage" />
+          Developer API Key Integration
+        </h4>
+        <p className="text-[10px] text-gray-500 font-mono leading-relaxed">
+          Bypass the standard plan quotas by securely supplying your own Gemini Developer API Key. Your key is kept entirely on your local browser device.
+        </p>
+
+        <div className="space-y-3">
+          {!isEditingKey ? (
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">Current Custom API Key</span>
+                <span className="font-sans font-bold text-gray-800 text-sm mt-0.5 block">
+                  {customApiKey ? '••••••••••••••••' + customApiKey.slice(-4) : 'No custom key configured. Running on standard quotas.'}
+                </span>
+              </div>
+              <button
+                onClick={() => setIsEditingKey(true)}
+                className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-pine text-[10px] font-bold uppercase tracking-widest rounded transition cursor-pointer"
+              >
+                {customApiKey ? 'Update Key' : 'Setup Key'}
+              </button>
+            </div>
+          ) : (
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                localStorage.setItem(`bp_gemini_api_key_${profile.email}`, customApiKey.trim());
+                setIsEditingKey(false);
+                alert('✅ Saved! Custom API key will be used for future AI generations.');
+              }} 
+              className="space-y-2"
+            >
+              <div className="relative">
+                <input
+                  type="text"
+                  value={customApiKey}
+                  onChange={e => setCustomApiKey(e.target.value)}
+                  placeholder="Paste your Gemini AI Studio API Key here (AIzaSy...)"
+                  className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:border-sage focus:ring-1 focus:ring-sage"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-pine hover:bg-pine-mid text-white text-[10px] font-bold uppercase tracking-widest rounded shadow-sm transition cursor-pointer flex-1"
+                >
+                  Save API Key
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomApiKey(localStorage.getItem(`bp_gemini_api_key_${profile.email}`) || '');
+                    setIsEditingKey(false);
+                  }}
+                  className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-bold uppercase tracking-widest rounded transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                {customApiKey && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if(confirm('Are you sure you want to remove your custom key? You will revert to standard plan quotas.')) {
+                        setCustomApiKey('');
+                        localStorage.removeItem(`bp_gemini_api_key_${profile.email}`);
+                        setIsEditingKey(false);
+                      }
+                    }}
+                    className="px-4 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-[10px] font-bold uppercase tracking-widest rounded transition cursor-pointer"
+                  >
+                    Clear Key
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
         </div>
       </div>
 

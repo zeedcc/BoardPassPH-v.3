@@ -575,6 +575,7 @@ export default function App() {
     }
 
     try {
+      const customKey = profile ? localStorage.getItem(`bp_gemini_api_key_${profile.email}`) : '';
       const res = await fetch('/api/generate-question', {
         method: 'POST',
         headers: {
@@ -586,7 +587,8 @@ export default function App() {
           difficulty,
           fileData,
           fileMimeType,
-          history
+          history,
+          customApiKey: customKey || ''
         })
       });
 

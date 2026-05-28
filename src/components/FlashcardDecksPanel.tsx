@@ -46,46 +46,8 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [fileExtensionError, setFileExtensionError] = useState('');
 
-  // AI Import Logs for weekly quota (timestamped)
-  const [aiImportLogs, setAiImportLogs] = useState<{timestamp: number, fileName: string}[]>(() => {
-    try {
-      const saved = localStorage.getItem(`bp_ai_import_logs_${profile.email}`);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const getImportLimit = (tier: string) => {
-    const t = tier || 'Free';
-    if (t === 'Clinical Suite' || t === 'Clinical' || t === 'Lifetime Pass') return 5;
-    if (t === 'Pro Suite' || t === 'Pro' || t === 'Study Buddy Trio') return 3;
-    if (t.includes('Trial')) return 2;
-    return 1;
-  };
-
-  const getWeeklyImportUsage = () => {
-    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return aiImportLogs.filter(log => log.timestamp > oneWeekAgo).length;
-  };
-
-  const getNextResetDate = () => {
-    if (aiImportLogs.length === 0) return null;
-    const oldestRelevant = aiImportLogs
-      .filter(log => log.timestamp > (Date.now() - 7 * 24 * 60 * 60 * 1000))
-      .sort((a, b) => a.timestamp - b.timestamp)[0];
-    if (!oldestRelevant) return null;
-    return new Date(oldestRelevant.timestamp + 7 * 24 * 60 * 60 * 1000);
-  };
-
-  // AI deck builder processed files list limit (maximum 5 files)
-  const [aiProcessedFiles, setAiProcessedFiles] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('bp_ai_deck_processed_files');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
+  const [deckApiKey, setDeckApiKey] = useState(() => {
+    return localStorage.getItem(`bp_gemini_api_key_${profile.email}`) || '';
   });
   
   // Public Decks pool
@@ -365,12 +327,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Weekly Limit Check
-    const currentLimit = getImportLimit(profile.tier);
-    const weeklyUsage = getWeeklyImportUsage();
-    if (weeklyUsage >= currentLimit) {
-      const resetDate = getNextResetDate();
-      alert(`⚠️ Weekly AI Limit Reached: Your current plan (${profile.tier}) allows ${currentLimit} import(s) per week. \n\nNext slot resets on: ${resetDate?.toLocaleString() || 'Next week'}. Upgrade to a higher Suite for increased limits!`);
+    // AI Quota check - Must have custom API key
+    if (!deckApiKey || deckApiKey.trim() === '') {
+      alert("⚠️ Developer API Key Required: You must paste your own Gemini API Key below to synthesize AI Deck cards.");
       return;
     }
 
@@ -477,12 +436,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       return;
     }
 
-    // Weekly Limit Check (Double verify before starting AI pipeline)
-    const currentLimit = getImportLimit(profile.tier);
-    const weeklyUsage = getWeeklyImportUsage();
-    if (weeklyUsage >= currentLimit) {
-      const resetDate = getNextResetDate();
-      alert(`⚠️ Weekly AI Limit Reached: Your current plan (${profile.tier}) allows ${currentLimit} import(s) per week. \n\nNext slot resets on: ${resetDate?.toLocaleString() || 'Next week'}. Upgrade to a higher Suite for increased limits!`);
+    // AI Quota check (Double verify)
+    if (!deckApiKey || deckApiKey.trim() === '') {
+      alert("⚠️ Developer API Key Required: You must paste your own Gemini API Key below to synthesize AI Deck cards.");
       return;
     }
 
@@ -516,7 +472,8 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
             fileContent: '',
             fileName: selectedFile?.name || 'Uploaded Notes',
             chunkIndex: i + 1,
-            totalChunks: chunks.length
+            totalChunks: chunks.length,
+            customApiKey: deckApiKey
           })
         });
 
@@ -547,22 +504,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       if (allCards.length > 0) {
         setAiGenResult(allCards);
         setAiDeckTitle(selectedFile ? `AI - ${selectedFile.name.split('.')[0]}` : `AI - Chapter Review ${new Date().toLocaleDateString()}`);
-        
-        // Log the import to weekly usage
-        const newLog = { 
-          timestamp: Date.now(), 
-          fileName: selectedFile?.name || 'Pasted Notes' 
-        };
-        const updatedLogs = [newLog, ...aiImportLogs];
-        setAiImportLogs(updatedLogs);
-        localStorage.setItem(`bp_ai_import_logs_${profile.email}`, JSON.stringify(updatedLogs));
-
-        // Log the file name into our processed slots to limit to 10
-        if (selectedFile && !aiProcessedFiles.includes(selectedFile.name)) {
-          const updated = [...aiProcessedFiles, selectedFile.name];
-          setAiProcessedFiles(updated);
-          localStorage.setItem('bp_ai_deck_processed_files', JSON.stringify(updated));
-        }
 
         if (originalChunkLength > 10) {
           alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nExtracted first 10 core sections (${chunks.length * 12000} chars) to guarantee full learning depth and stability. Generated a master clinical deck of ${allCards.length} index cards!`);
@@ -2401,43 +2342,33 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                       <p className="text-[10px] text-gray-400 mt-1">Supports PDF, Word (.docx), Excel (.xlsx), CSV, or TXT (Max 10MB)</p>
                     </div>
 
-                    {/* AI Processed Files slots management (limit to reset) */}
-                    <div className="pt-1">
-                      <div className="flex justify-between items-center bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-[11px] font-semibold">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-mono text-gray-500 font-bold uppercase">
-                            Weekly Import Usage: {getWeeklyImportUsage()} / {getImportLimit(profile.tier)} Used
-                          </span>
-                          <span className="text-[8px] text-gray-400 font-medium">
-                            Tier: {profile.tier || 'Free'} · Reset is weekly
-                          </span>
-                        </div>
-                        {aiImportLogs.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm("Would you like to clear your import history? This will only clear local visual logs and won't bypass server-side cooldowns if implemented.")) {
-                                setAiImportLogs([]);
-                                localStorage.setItem(`bp_ai_import_logs_${profile.email}`, JSON.stringify([]));
-                              }
-                            }}
-                            className="text-[10px] font-black text-rose-700 hover:underline cursor-pointer"
-                          >
-                            Clear Logs
-                          </button>
-                        )}
+                    {/* API Key Configuration for AI Generaton */}
+                    <div className="pt-2">
+                      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5 mb-1.5">
+                        Developer API Key Configuration
+                      </label>
+                      <input
+                        type="text"
+                        value={deckApiKey}
+                        onChange={(e) => {
+                          setDeckApiKey(e.target.value);
+                          localStorage.setItem(`bp_gemini_api_key_${profile.email}`, e.target.value.trim());
+                        }}
+                        placeholder="Paste your Gemini AI Studio API Key here (AIzaSy...)"
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono outline-none focus:border-sage focus:ring-1 focus:ring-sage"
+                      />
+                      <div className="mt-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
+                        <p className="text-[11px] font-bold text-blue-900 mb-1">How to get your free Gemini API Key:</p>
+                        <ol className="list-decimal list-inside text-[10px] text-blue-800 space-y-1">
+                          <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline font-semibold hover:text-blue-600">Google AI Studio</a> and sign in with your Google account.</li>
+                          <li>Click the <strong>"Get API key"</strong> button.</li>
+                          <li>Click <strong>"Create API key in new project"</strong>.</li>
+                          <li>Copy the generated key (it starts with <code className="bg-blue-100 px-1 py-0.5 rounded">AIzaSy</code>) and paste it in the field above.</li>
+                        </ol>
+                        <p className="text-[9px] text-blue-700 mt-2">
+                          Your key is stored securely locally in your browser and used directly for generations without constraints.
+                        </p>
                       </div>
-                      
-                      {aiImportLogs.length > 0 && (
-                        <div className="mt-2 space-y-1 max-h-[70px] overflow-y-auto no-scrollbar bg-gray-50/40 p-2 rounded-lg border border-gray-100">
-                          {aiImportLogs.slice(0, 5).map((log, idx) => (
-                            <div key={idx} className="flex justify-between items-center bg-white/50 px-2 py-1 rounded text-[9px] text-gray-400 font-mono">
-                              <span className="truncate max-w-[120px]">📁 {log.fileName}</span>
-                              <span>{new Date(log.timestamp).toLocaleDateString()}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                     </div>
 
                     {isParsingFile && (
