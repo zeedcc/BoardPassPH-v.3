@@ -432,7 +432,7 @@ export const StudyPetWidget: React.FC<StudyPetWidgetProps> = ({ profile, setProf
 
   // Dynamic expression rendering
   const getRenderEmoji = () => {
-    if (companionLevel < 2) return '🥚';
+    if (companionLevel < 1) return '🥚'; // Egg stage is usually level 0 or handled differently
     
     const baseEmoji = currentTemplate.emoji;
     switch (currentExpression) {
@@ -497,7 +497,7 @@ export const StudyPetWidget: React.FC<StudyPetWidgetProps> = ({ profile, setProf
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         
         {/* PHYSICAL retro handheld pocket pet console system design */}
-        <div className="lg:col-span-5 bg-gradient-to-b from-gray-100 to-gray-200 border-x-4 border-t-4 border-b-12 border-gray-300 rounded-[3rem] p-5 shadow-lg relative flex flex-col justify-between max-w-sm mx-auto w-full min-h-[440px]">
+        <div className="lg:col-span-6 bg-gradient-to-b from-gray-100 to-gray-200 border-x-4 border-t-4 border-b-12 border-gray-300 rounded-[3.5rem] p-6 shadow-xl relative flex flex-col justify-between max-w-md mx-auto w-full min-h-[520px]">
           
           {/* Authentic retro console top details */}
           <div className="w-full flex justify-between items-center mb-4 select-none">
@@ -547,7 +547,7 @@ export const StudyPetWidget: React.FC<StudyPetWidgetProps> = ({ profile, setProf
                     initial={{ opacity: 0, scale: 0.9, y: 10 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9 }}
-                    className="absolute top-1 left-2 right-2 bg-emerald-900/90 border border-emerald-600 rounded-lg p-2 text-[9.5px] text-emerald-200 leading-snug shadow-md select-text overflow-hidden text-left"
+                    className="absolute top-1 left-2 right-2 bg-emerald-900/90 border border-emerald-600 rounded-lg p-2 text-[9.5px] text-emerald-200 leading-snug shadow-md select-text overflow-hidden text-left z-40"
                   >
                     <div className="flex justify-between items-start gap-1">
                       <span className="flex-1">💬 &ldquo;{activeQuote}&rdquo;</span>
@@ -574,11 +574,11 @@ export const StudyPetWidget: React.FC<StudyPetWidgetProps> = ({ profile, setProf
               {/* Standard Central Rounded Sprite Deck */}
               <button 
                 onClick={handleInteractCompanion}
-                className="w-24 h-24 bg-gradient-to-b from-emerald-900/40 to-emerald-900/80 rounded-full border-2 border-emerald-700/60 flex items-center justify-center text-5xl shadow-inner transition-transform relative select-none cursor-pointer hover:scale-105 active:scale-95 duration-150"
+                className="w-32 h-32 bg-gradient-to-b from-emerald-900/40 to-emerald-900/80 rounded-full border-2 border-emerald-700/60 flex items-center justify-center text-6xl shadow-inner transition-transform relative select-none cursor-pointer hover:scale-105 active:scale-95 duration-150"
                 title="Tap to Interactively Pet"
               >
                 {/* Mood indicator bead */}
-                <div className={`absolute top-1 right-2 w-2.5 h-2.5 rounded-full ${petHappiness >= 75 ? 'bg-teal-400' : 'bg-amber-400'} border border-emerald-950 shadow-inner`} />
+                <div className={`absolute top-1 right-2 w-2.5 h-2.5 rounded-full ${petHappiness >= 75 ? 'bg-teal-400' : 'bg-amber-400'} border border-emerald-950 shadow-inner z-20`} />
                 
                 <div className={`transition-all duration-300 ${
                   petAnimationState === 'pulse' ? 'animate-pulse scale-110' :
@@ -726,7 +726,7 @@ export const StudyPetWidget: React.FC<StudyPetWidgetProps> = ({ profile, setProf
         </div>
 
         {/* Dynamic configuration system interface panels */}
-        <div className="lg:col-span-7 flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-6 flex flex-col justify-between space-y-4">
           <div className="space-y-4">
             
             {/* Modular styled tabs navigator */}

@@ -46,7 +46,39 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [fileExtensionError, setFileExtensionError] = useState('');
 
-  // AI deck builder processed files list limit (maximum 10 files)
+  // AI Import Logs for weekly quota (timestamped)
+  const [aiImportLogs, setAiImportLogs] = useState<{timestamp: number, fileName: string}[]>(() => {
+    try {
+      const saved = localStorage.getItem(`bp_ai_import_logs_${profile.email}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const getImportLimit = (tier: string) => {
+    const t = tier || 'Free';
+    if (t === 'Clinical Suite' || t === 'Clinical' || t === 'Lifetime Pass') return 5;
+    if (t === 'Pro Suite' || t === 'Pro' || t === 'Study Buddy Trio') return 3;
+    if (t.includes('Trial')) return 2;
+    return 1;
+  };
+
+  const getWeeklyImportUsage = () => {
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return aiImportLogs.filter(log => log.timestamp > oneWeekAgo).length;
+  };
+
+  const getNextResetDate = () => {
+    if (aiImportLogs.length === 0) return null;
+    const oldestRelevant = aiImportLogs
+      .filter(log => log.timestamp > (Date.now() - 7 * 24 * 60 * 60 * 1000))
+      .sort((a, b) => a.timestamp - b.timestamp)[0];
+    if (!oldestRelevant) return null;
+    return new Date(oldestRelevant.timestamp + 7 * 24 * 60 * 60 * 1000);
+  };
+
+  // AI deck builder processed files list limit (maximum 5 files)
   const [aiProcessedFiles, setAiProcessedFiles] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('bp_ai_deck_processed_files');
@@ -333,11 +365,13 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!aiProcessedFiles.includes(file.name)) {
-      if (aiProcessedFiles.length >= 10) {
-        alert("⚠️ AI Deck Builder Limit: You have reached the limit of 10 reference files for the free AI tier. This quota is sufficient for free testbank compilation. Consider resetting your slot list below to upload a different resource.");
-        return;
-      }
+    // Weekly Limit Check
+    const currentLimit = getImportLimit(profile.tier);
+    const weeklyUsage = getWeeklyImportUsage();
+    if (weeklyUsage >= currentLimit) {
+      const resetDate = getNextResetDate();
+      alert(`⚠️ Weekly AI Limit Reached: Your current plan (${profile.tier}) allows ${currentLimit} import(s) per week. \n\nNext slot resets on: ${resetDate?.toLocaleString() || 'Next week'}. Upgrade to a higher Suite for increased limits!`);
+      return;
     }
 
     const tenMbLimit = 10 * 1024 * 1024;
@@ -443,6 +477,15 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       return;
     }
 
+    // Weekly Limit Check (Double verify before starting AI pipeline)
+    const currentLimit = getImportLimit(profile.tier);
+    const weeklyUsage = getWeeklyImportUsage();
+    if (weeklyUsage >= currentLimit) {
+      const resetDate = getNextResetDate();
+      alert(`⚠️ Weekly AI Limit Reached: Your current plan (${profile.tier}) allows ${currentLimit} import(s) per week. \n\nNext slot resets on: ${resetDate?.toLocaleString() || 'Next week'}. Upgrade to a higher Suite for increased limits!`);
+      return;
+    }
+
     setIsGeneratingDeckAI(true);
     setAiGenerationProgressText("Reading and dividing key chapters...");
     setAiGenResult([]);
@@ -505,6 +548,15 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         setAiGenResult(allCards);
         setAiDeckTitle(selectedFile ? `AI - ${selectedFile.name.split('.')[0]}` : `AI - Chapter Review ${new Date().toLocaleDateString()}`);
         
+        // Log the import to weekly usage
+        const newLog = { 
+          timestamp: Date.now(), 
+          fileName: selectedFile?.name || 'Pasted Notes' 
+        };
+        const updatedLogs = [newLog, ...aiImportLogs];
+        setAiImportLogs(updatedLogs);
+        localStorage.setItem(`bp_ai_import_logs_${profile.email}`, JSON.stringify(updatedLogs));
+
         // Log the file name into our processed slots to limit to 10
         if (selectedFile && !aiProcessedFiles.includes(selectedFile.name)) {
           const updated = [...aiProcessedFiles, selectedFile.name];
@@ -2068,104 +2120,14 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
             >
               🌍 Community Decks
             </button>
-          </div>
-
-          {/* LOBBY JOIN OR CREATE ROOM PORTALS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
-            {/* LOBBY JOIN ROOM ENTRY SLOT */}
-            <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-sm flex flex-col justify-between">
-              <div>
-                <h4 className="font-display text-base text-pine mb-1 select-none font-black uppercase tracking-wide font-mono flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-pine" /> Join Active Room
-                </h4>
-                <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-                  Have an invitation code from classmates? Paste it below to start answering cooperatively in real time.
-                </p>
-              </div>
-              <div className="flex gap-2 mt-auto">
-                <input
-                  type="text"
-                  placeholder="e.g. room-741285"
-                  value={joinRoomIdInput}
-                  onChange={(e) => setJoinRoomIdInput(e.target.value)}
-                  className="flex-grow bg-[#deebe3]/15 border border-gray-250 focus:bg-white focus:border-pine rounded-xl px-4 py-2.5 text-xs font-mono font-bold tracking-wider uppercase outline-none"
-                />
-                <button
-                  onClick={handleJoinLiveSessionByInput}
-                  disabled={sessionRoomLoading}
-                  className="px-5 py-2.5 bg-pine hover:bg-pine-mid text-cream text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-55 shrink-0"
-                >
-                  {sessionRoomLoading ? 'Connecting...' : 'Join Board'}
-                </button>
-              </div>
-            </div>
-
-            {/* CREATE / HOST ROOM PORTAL */}
-            <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-sm flex flex-col justify-between">
-              <div>
-                <h4 className="font-display text-base text-pine mb-1 select-none font-black uppercase tracking-wide font-mono flex items-center gap-1.5">
-                  <Plus className="w-4 h-4 text-pine" /> Create Active Room
-                </h4>
-                <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-                  Host a brand new real-time review room immediately. Select your study deck and challenge parameters below:
-                </p>
-              </div>
-              <div className="space-y-3 mt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">
-                      Target Study Deck
-                    </label>
-                    <select
-                      value={selectedDeckIdForNewRoom}
-                      onChange={(e) => setSelectedDeckIdForNewRoom(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:border-pine focus:bg-white"
-                    >
-                      <option value="">-- Choose a Study Deck --</option>
-                      {myCustomDecks.length > 0 && (
-                        <optgroup label="My Custom Decks">
-                          {myCustomDecks.map(deck => (
-                            <option key={deck.id} value={deck.id}>{deck.title} ({deck.cards.length} cards)</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {publicDecks.length > 0 && (
-                        <optgroup label="Community Decks">
-                          {publicDecks.map(deck => (
-                            <option key={deck.id} value={deck.id}>{deck.title} ({deck.cards.length} cards)</option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">
-                      Game Lobby Mode
-                    </label>
-                    <select
-                      value={roomLobbyMode}
-                      onChange={(e) => setRoomLobbyMode(e.target.value as 'multiplayer' | 'solo')}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:border-pine focus:bg-white"
-                    >
-                      <option value="multiplayer">👥 Live Multiplayer (Play with Classmates)</option>
-                      <option value="solo">🧑‍💻 Solo Practice (Play with AI Peers)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-1">
-                  <button
-                    onClick={handleCreateRoomFromForm}
-                    disabled={sessionRoomLoading || !selectedDeckIdForNewRoom}
-                    className="w-full sm:w-auto px-6 py-2.5 bg-mint hover:bg-mint-mid text-pine text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-45 flex items-center justify-center gap-1.5 shadow-sm border-b-2 border-[#15a371]"
-                  >
-                    <Play className="w-3.5 h-3.5" />
-                    <span>Launch Active Lobby</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+            <button
+              onClick={() => setActiveSubTab('live-recall')}
+              className={`flex-grow text-center px-3 py-2.5 rounded-xl transition duration-150 cursor-pointer ${
+                activeSubTab === 'live-recall' ? 'bg-pine text-[#fbfdfb] font-black shadow-xs' : 'text-pine hover:bg-foam/65'
+              }`}
+            >
+              🧠 Recall Arena
+            </button>
           </div>
 
           {/* MANUAL DECK CREATION MODAL OVERLAY */}
@@ -2439,33 +2401,39 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                       <p className="text-[10px] text-gray-400 mt-1">Supports PDF, Word (.docx), Excel (.xlsx), CSV, or TXT (Max 10MB)</p>
                     </div>
 
-                    {/* AI Processed Files slots management (limit to 10) */}
+                    {/* AI Processed Files slots management (limit to reset) */}
                     <div className="pt-1">
                       <div className="flex justify-between items-center bg-gray-50 border border-gray-200 px-3 py-2 rounded-xl text-[11px] font-semibold">
-                        <span className="text-[10px] font-mono text-gray-500 font-bold uppercase">
-                          AI Tier Slots: {aiProcessedFiles.length} / 10 Used
-                        </span>
-                        {aiProcessedFiles.length > 0 && (
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-mono text-gray-500 font-bold uppercase">
+                            Weekly Import Usage: {getWeeklyImportUsage()} / {getImportLimit(profile.tier)} Used
+                          </span>
+                          <span className="text-[8px] text-gray-400 font-medium">
+                            Tier: {profile.tier || 'Free'} · Reset is weekly
+                          </span>
+                        </div>
+                        {aiImportLogs.length > 0 && (
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm("Would you like to clear your reference file uploads history to free up slots? Past generated decks won’t be affected.")) {
-                                setAiProcessedFiles([]);
-                                localStorage.setItem('bp_ai_deck_processed_files', JSON.stringify([]));
+                              if (window.confirm("Would you like to clear your import history? This will only clear local visual logs and won't bypass server-side cooldowns if implemented.")) {
+                                setAiImportLogs([]);
+                                localStorage.setItem(`bp_ai_import_logs_${profile.email}`, JSON.stringify([]));
                               }
                             }}
                             className="text-[10px] font-black text-rose-700 hover:underline cursor-pointer"
                           >
-                            Reset History Slots
+                            Clear Logs
                           </button>
                         )}
                       </div>
-                      {aiProcessedFiles.length > 0 && (
-                        <div className="mt-2 text-[9px] font-mono text-gray-400 max-h-[70px] overflow-y-auto bg-gray-50/40 p-2 rounded-lg space-y-1 border border-gray-100">
-                          {aiProcessedFiles.map((fname, idx) => (
-                            <div key={idx} className="flex justify-between items-center gap-2">
-                              <span className="truncate">📁 {fname}</span>
-                              <span className="text-emerald-600 font-bold uppercase select-none text-[8px] shrink-0">Free Slot Active</span>
+                      
+                      {aiImportLogs.length > 0 && (
+                        <div className="mt-2 space-y-1 max-h-[70px] overflow-y-auto no-scrollbar bg-gray-50/40 p-2 rounded-lg border border-gray-100">
+                          {aiImportLogs.slice(0, 5).map((log, idx) => (
+                            <div key={idx} className="flex justify-between items-center bg-white/50 px-2 py-1 rounded text-[9px] text-gray-400 font-mono">
+                              <span className="truncate max-w-[120px]">📁 {log.fileName}</span>
+                              <span>{new Date(log.timestamp).toLocaleDateString()}</span>
                             </div>
                           ))}
                         </div>
@@ -2653,6 +2621,153 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* RECALL ARENA LOBBY TAB SECTION */}
+          {activeSubTab === 'live-recall' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-gradient-to-br from-[#1e3e29] to-[#2f4939] rounded-3xl p-8 text-white relative overflow-hidden border border-[#2f4939]/30 shadow-lg">
+                {/* Background Pattern */}
+                <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+                
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                  <div className="space-y-3">
+                    <span className="text-[10px] uppercase font-black tracking-widest text-[#9ed4b7] bg-white/10 px-3 py-1 rounded-full border border-white/10 w-max block">
+                      BoardPassPH Online Arena
+                    </span>
+                    <h2 className="font-display text-3xl font-extrabold italic text-[#fbfdfb] tracking-tight">
+                      Active Recall <span className="text-mint font-normal not-italic">Lobby Arena</span>
+                    </h2>
+                    <p className="text-xs text-[#deebe3] max-w-xl leading-relaxed opacity-90">
+                      Review Board diagnostics in perfect real-time synchronization. Host a board room, generate instant joining credentials, chat live, and analyze mock solutions together with your classmates or AI peers!
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-display font-black text-white">100%</p>
+                      <p className="text-[9px] uppercase font-bold text-mint/70 tracking-widest">Cloud Sync</p>
+                    </div>
+                    <div className="h-10 w-[1px] bg-white/10" />
+                    <div className="text-center">
+                      <p className="text-2xl font-display font-black text-white">Live</p>
+                      <p className="text-[9px] uppercase font-bold text-mint/70 tracking-widest">Multiplayer</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* JOIN ROOM PORTAL */}
+                <div className="bg-white border border-gray-150 rounded-3xl p-8 shadow-sm space-y-6 transform transition hover:shadow-md">
+                  <div className="space-y-2">
+                    <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mb-2">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <h4 className="font-display text-xl text-pine font-black uppercase tracking-wide font-mono">
+                      Join Active Arena
+                    </h4>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Enter a unique study room code shared by your peers to join their live testing lobby instantly.
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <input
+                      type="text"
+                      placeholder="e.g. room-741285"
+                      value={joinRoomIdInput}
+                      onChange={(e) => setJoinRoomIdInput(e.target.value)}
+                      className="w-full bg-[#deebe3]/15 border border-gray-250 focus:bg-white focus:border-pine rounded-2xl px-5 py-3.5 text-sm font-mono font-black tracking-wider uppercase outline-none shadow-sm transition"
+                    />
+                    <button
+                      onClick={handleJoinLiveSessionByInput}
+                      disabled={sessionRoomLoading || !joinRoomIdInput.trim()}
+                      className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-widest rounded-2xl cursor-pointer disabled:opacity-55 shadow-md border-b-4 border-indigo-800 active:border-b-0 active:translate-y-1 transition-all"
+                    >
+                      {sessionRoomLoading ? 'Connecting to Firebase...' : 'Step into the Arena'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* CREATE ROOM PORTAL */}
+                <div className="bg-white border border-gray-150 rounded-3xl p-8 shadow-sm space-y-6 transform transition hover:shadow-md">
+                  <div className="space-y-2">
+                    <div className="w-12 h-12 bg-mint/10 border border-mint/20 text-[#1e3e29] rounded-2xl flex items-center justify-center mb-2">
+                      <Plus className="w-6 h-6" />
+                    </div>
+                    <h4 className="font-display text-xl text-pine font-black uppercase tracking-wide font-mono">
+                      Host Recall Arena
+                    </h4>
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      Initialize a brand new real-time review room. You control question loading, timers, and revealed answers.
+                    </p>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-black text-gray-400 block tracking-widest font-mono">
+                        Select Study Deck Resource:
+                      </label>
+                      <select
+                        value={selectedDeckIdForNewRoom}
+                        onChange={(e) => setSelectedDeckIdForNewRoom(e.target.value)}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-xs font-bold outline-none focus:border-pine focus:bg-white shadow-sm transition"
+                      >
+                        <option value="">-- Choose a Study Deck --</option>
+                        {myCustomDecks.length > 0 && (
+                          <optgroup label="My Custom Decks">
+                            {myCustomDecks.map(deck => (
+                              <option key={deck.id} value={deck.id}>{deck.title} ({deck.cards.length} cards)</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {publicDecks.length > 0 && (
+                          <optgroup label="Community Decks">
+                            {publicDecks.map(deck => (
+                              <option key={deck.id} value={deck.id}>{deck.title} ({deck.cards.length} cards)</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-black text-gray-400 block tracking-widest font-mono">
+                        Arena Difficulty Mode:
+                      </label>
+                      <select
+                        value={roomLobbyMode}
+                        onChange={(e) => setRoomLobbyMode(e.target.value as 'multiplayer' | 'solo')}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-xs font-bold outline-none focus:border-pine focus:bg-white shadow-sm transition"
+                      >
+                        <option value="multiplayer">👥 Peer Challenge (Play with Classmates)</option>
+                        <option value="solo">🧑‍💻 Solo Arena (Play with AI Virtual Peers)</option>
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={handleCreateRoomFromForm}
+                      disabled={sessionRoomLoading || !selectedDeckIdForNewRoom}
+                      className="w-full py-3.5 bg-pine hover:bg-pine-mid text-[#fbfdfb] text-xs font-black uppercase tracking-widest rounded-2xl cursor-pointer disabled:opacity-45 shadow-md border-b-4 border-emerald-950 active:border-b-0 active:translate-y-1 transition-all"
+                    >
+                      Launch Active Lobby Room
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex gap-4 text-amber-900 shadow-xs">
+                <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+                  <Sparkles className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <h5 className="font-bold text-sm">Pro Tip: Study Synchronization</h5>
+                  <p className="text-xs leading-relaxed opacity-85 mt-0.5">
+                    In the Arena, everyone sees the same card at the exact same second. Once you type your recall statement, you'll see who else is done. The Host can reveal the answer when everyone is ready!
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
