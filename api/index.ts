@@ -1,2 +1,3 @@
-import app from '../dist/server.cjs';
+import app from '../server';
+
 export default app;

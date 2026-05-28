@@ -63,8 +63,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   // Live Active Recall State Models
   const [activeSessionRoom, setActiveSessionRoom] = useState<GroupRecallRoom | null>(null);
   const [joinRoomIdInput, setJoinRoomIdInput] = useState('');
-  const [selectedDeckIdForNewRoom, setSelectedDeckIdForNewRoom] = useState('');
-  const [roomLobbyMode, setRoomLobbyMode] = useState<'multiplayer' | 'solo'>('multiplayer');
   const [myWrittenAnswer, setMyWrittenAnswer] = useState('');
   const [playersDoneSubmitting, setPlayersDoneSubmitting] = useState(false);
   const [selectedSelfRating, setSelectedSelfRating] = useState<'perfect' | 'vague' | 'forgot' | null>(null);
@@ -518,7 +516,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
           alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nWe successfully processed ${chunks.length} distinct sections of your document in parallel and structured a master deck of ${allCards.length} clinical cards. Happy learning!`);
         }
       } else {
-        alert("Failed to synthesize flashcards. Please double check that process.env.GEMINI_API_KEY is configured correctly in Settings > Secrets.");
+        alert("Failed to synthesize flashcards. Please double check that process.env.ANTHROPIC_API_KEY is configured correctly in Vercel Environment Variables.");
       }
     } catch (err: any) {
       console.warn("AI deck generation client error:", err);
@@ -707,19 +705,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     } finally {
       setSessionRoomLoading(false);
     }
-  };
-
-  const handleCreateRoomFromForm = () => {
-    if (!selectedDeckIdForNewRoom) {
-      alert("Please select a study deck to host!");
-      return;
-    }
-    const deck = myCustomDecks.find(d => d.id === selectedDeckIdForNewRoom) || publicDecks.find(d => d.id === selectedDeckIdForNewRoom);
-    if (!deck) {
-      alert("Selected deck could not be found.");
-      return;
-    }
-    handleLaunchLiveGroupRecall(deck, roomLobbyMode === 'solo');
   };
 
   const handleJoinLiveSessionByInput = async () => {
@@ -2070,101 +2055,29 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
             </button>
           </div>
 
-          {/* LOBBY JOIN OR CREATE ROOM PORTALS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
-            {/* LOBBY JOIN ROOM ENTRY SLOT */}
-            <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-sm flex flex-col justify-between">
-              <div>
-                <h4 className="font-display text-base text-pine mb-1 select-none font-black uppercase tracking-wide font-mono flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-pine" /> Join Active Room
-                </h4>
-                <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-                  Have an invitation code from classmates? Paste it below to start answering cooperatively in real time.
-                </p>
-              </div>
-              <div className="flex gap-2 mt-auto">
-                <input
-                  type="text"
-                  placeholder="e.g. room-741285"
-                  value={joinRoomIdInput}
-                  onChange={(e) => setJoinRoomIdInput(e.target.value)}
-                  className="flex-grow bg-[#deebe3]/15 border border-gray-250 focus:bg-white focus:border-pine rounded-xl px-4 py-2.5 text-xs font-mono font-bold tracking-wider uppercase outline-none"
-                />
-                <button
-                  onClick={handleJoinLiveSessionByInput}
-                  disabled={sessionRoomLoading}
-                  className="px-5 py-2.5 bg-pine hover:bg-pine-mid text-cream text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-55 shrink-0"
-                >
-                  {sessionRoomLoading ? 'Connecting...' : 'Join Board'}
-                </button>
-              </div>
-            </div>
-
-            {/* CREATE / HOST ROOM PORTAL */}
-            <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-sm flex flex-col justify-between">
-              <div>
-                <h4 className="font-display text-base text-pine mb-1 select-none font-black uppercase tracking-wide font-mono flex items-center gap-1.5">
-                  <Plus className="w-4 h-4 text-pine" /> Create Active Room
-                </h4>
-                <p className="text-xs text-gray-500 mb-3 leading-relaxed">
-                  Host a brand new real-time review room immediately. Select your study deck and challenge parameters below:
-                </p>
-              </div>
-              <div className="space-y-3 mt-2">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">
-                      Target Study Deck
-                    </label>
-                    <select
-                      value={selectedDeckIdForNewRoom}
-                      onChange={(e) => setSelectedDeckIdForNewRoom(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:border-pine focus:bg-white"
-                    >
-                      <option value="">-- Choose a Study Deck --</option>
-                      {myCustomDecks.length > 0 && (
-                        <optgroup label="My Custom Decks">
-                          {myCustomDecks.map(deck => (
-                            <option key={deck.id} value={deck.id}>{deck.title} ({deck.cards.length} cards)</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {publicDecks.length > 0 && (
-                        <optgroup label="Community Decks">
-                          {publicDecks.map(deck => (
-                            <option key={deck.id} value={deck.id}>{deck.title} ({deck.cards.length} cards)</option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">
-                      Game Lobby Mode
-                    </label>
-                    <select
-                      value={roomLobbyMode}
-                      onChange={(e) => setRoomLobbyMode(e.target.value as 'multiplayer' | 'solo')}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:border-pine focus:bg-white"
-                    >
-                      <option value="multiplayer">👥 Live Multiplayer (Play with Classmates)</option>
-                      <option value="solo">🧑‍💻 Solo Practice (Play with AI Peers)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-1">
-                  <button
-                    onClick={handleCreateRoomFromForm}
-                    disabled={sessionRoomLoading || !selectedDeckIdForNewRoom}
-                    className="w-full sm:w-auto px-6 py-2.5 bg-mint hover:bg-mint-mid text-pine text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-45 flex items-center justify-center gap-1.5 shadow-sm border-b-2 border-[#15a371]"
-                  >
-                    <Play className="w-3.5 h-3.5" />
-                    <span>Launch Active Lobby</span>
-                  </button>
-                </div>
-              </div>
+          {/* LOBBY JOIN ROOM ENTRY SLOT */}
+          <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-sm max-w-md">
+            <h4 className="font-display text-base text-pine mb-1 select-none font-black uppercase tracking-wide font-mono">
+              👥 Join Active Room
+            </h4>
+            <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+              Have an invitation code from classmates? Paste it below to start answering cooperatively in real time.
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="e.g. room-741285"
+                value={joinRoomIdInput}
+                onChange={(e) => setJoinRoomIdInput(e.target.value)}
+                className="flex-grow bg-[#deebe3]/15 border border-gray-250 focus:bg-white focus:border-pine rounded-xl px-4 py-2.5 text-xs font-mono font-bold tracking-wider uppercase outline-none"
+              />
+              <button
+                onClick={handleJoinLiveSessionByInput}
+                disabled={sessionRoomLoading}
+                className="px-6 py-2.5 bg-pine hover:bg-pine-mid text-cream text-xs font-black uppercase tracking-wider rounded-xl cursor-pointer disabled:opacity-55"
+              >
+                {sessionRoomLoading ? 'Connecting...' : 'Join Board'}
+              </button>
             </div>
           </div>
 

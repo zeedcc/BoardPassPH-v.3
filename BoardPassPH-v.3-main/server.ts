@@ -19,113 +19,110 @@ app.use((req, res, next) => {
   next();
 });
 
-// Lazy init of Gemini Client
-let aiClient: GoogleGenAI | null = null;
+// Lazy init — mirrors your existing Gemini pattern
+let geminiClient: GoogleGenAI | null = null;
 function getGemini(): GoogleGenAI | null {
-  if (!aiClient) {
+  if (!geminiClient) {
     const key = process.env.GEMINI_API_KEY;
-    if (key && key !== 'MY_GEMINI_API_KEY' && key.trim() !== '') {
-      aiClient = new GoogleGenAI({
-        apiKey: key,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
+    if (key && key.trim() !== '') {
+      geminiClient = new GoogleGenAI({ apiKey: key });
     }
   }
-  return aiClient;
+  return geminiClient;
 }
 
-// REST end points for BoardPassPH AI engines
-app.post('/api/generate-question', async (req, res) => {
-  const { focusArea, source, difficulty, fileData, fileMimeType, history } = req.body;
+app.post('/api/generate-deck', async (req, res) => {
+  const { textPayload, fileContent, fileName, chunkIndex, totalChunks } = req.body;
   const ai = getGemini();
 
   if (!ai) {
-    // Graceful fallback trigger
-    return res.json({ isFallback: true, msg: 'No active Gemini key present' });
+    return res.json({
+      isFallback: true,
+      msg: 'No active Gemini key present. Please add GEMINI_API_KEY to your .env.'
+    });
   }
 
   try {
-    let contextInput = '';
-    if (fileData) {
-      contextInput = `\n[STUDY REFERENCE RESOURCE ATTACHED]: Use the following base64 parsed guidelines as primary clinical context to formulate this question. Avoid generic templates, reference this document directly. DATA: ${fileData.substring(0, 10000)}`;
-    }
-    
-    let historyInput = '';
-    if (history && history.length > 0) {
-      const parsedHistory = history.map((item: any) => {
-        try {
-          if (item && typeof item === 'string' && item.startsWith('{')) {
-            const parsed = JSON.parse(item);
-            return parsed.topic ? `${parsed.topic} (vignette: "${(parsed.vignette || '').substring(0, 60)}...")` : (parsed.vignette || '').substring(0, 80);
-          }
-          return typeof item === 'string' ? item.substring(0, 85) : '';
-        } catch {
-          return typeof item === 'string' ? item.substring(0, 85) : '';
-        }
-      }).filter(Boolean);
+    let referenceInput = '';
+    const MAX_CHAR_CAP = 15000;
 
-      if (parsedHistory.length > 0) {
-        historyInput = `\nIMPORTANT: The user has already solved questions on the following topics or vignettes recently. You MUST NOT duplicate or generate highly similar questions or clinical scenarios. Choose an entirely different clinical diagnosis, psychometric scale, or ethical subtopic:\n- ${parsedHistory.slice(-15).join('\n- ')}\n`;
-      }
-    }
+    let trimmedPayload = (textPayload || '').trim();
+    let trimmedFile = (fileContent || '').trim();
 
-    const sysInstruct = `You are an expert psychometrician and board exam author for the Philippine Psychiatric Licensure Examination (PmLE). Your duty is to write professional, high-yield Multiple Choice Questions (MCQ) aligned with the DSM-5-TR and Republic Act 10029 (Psychology Law).
-Format your questions strictly based on the requested focal subject area and difficulty constraints:
-- Easy: Diagnostic criteria baseline (primary symptoms of MDD, schizophrenia, WISC-V levels).
-- Medium: Integrates qualifiers (e.g., "with melancholic features", "rapid cycling", specific psychological assessment subscale metrics).
-- Hard: Integrates complex clinical differentials OR sets up robust diagnostic vignettes where none of the answers match the diagnosis thresholds perfectly, in which case the user must select the "No clinical diagnosis" option.
+    if (trimmedPayload.length > MAX_CHAR_CAP)
+      trimmedPayload = trimmedPayload.substring(0, MAX_CHAR_CAP) + '\n...[Truncated]...';
+    if (trimmedFile.length > MAX_CHAR_CAP)
+      trimmedFile = trimmedFile.substring(0, MAX_CHAR_CAP) + '\n...[Truncated]...';
 
-Return your response strictly in JSON matching the requested responseSchema. Options must always be exactly a 4-item array.`;
+    if (trimmedPayload) referenceInput += `\nPASTED NOTES:\n${trimmedPayload}\n`;
+    if (trimmedFile) referenceInput += `\nUPLOADED FILE (${fileName || 'document'}):\n${trimmedFile}\n`;
 
-    const modelName = 'gemini-3.5-flash';
+    if (!referenceInput.trim())
+      return res.status(400).json({ error: 'Please provide notes or an uploaded file.' });
+
+    const progressContext = chunkIndex && totalChunks
+      ? `\nYou are processing section ${chunkIndex} of ${totalChunks}. Cover this section specifically.`
+      : '';
+
+    const sysInstruct = `You are an expert clinical psychologist and reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Read the user's study notes and convert the most critical concepts into active recall flashcards.${progressContext}
+- 'front': a direct active recall question
+- 'back': precise, concise answer or clinical definition
+- 'hint': a short mnemonic or retrieval cue
+Generate exactly 4–5 high-yield cards per section.`;
+
     const response = await ai.models.generateContent({
-      model: modelName,
-      contents: `Formulate a simulated board exam question focusing on "${focusArea || 'any DSM-5 chapter'}" with difficulty level "${difficulty || 'random'}".${historyInput}${contextInput}`,
+      model: 'gemini-2.0-flash',
+      contents: `Generate flashcards from this study material: ${referenceInput}`,
       config: {
         systemInstruction: sysInstruct,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
-          required: ['category', 'vignette', 'options', 'correctIndex', 'explanation'],
+          required: ['cards'],
           properties: {
-            category: {
-              type: Type.STRING,
-              description: 'The specific board topic category (e.g. DSM-5 Bipolar Disorders, Tests & Assessments, I/O HRM, Lifespan Stages)'
-            },
-            vignette: {
-              type: Type.STRING,
-              description: 'A realistic scenario or vignette representing a clinical psychiatric consultation, test suite briefing, or industrial work dispute.'
-            },
-            options: {
+            cards: {
               type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: 'Exactly four plausible multiple choice answers representing clinical options.'
-            },
-            correctIndex: {
-              type: Type.INTEGER,
-              description: 'The zero-based index of the correct option (0 to 3)'
-            },
-            explanation: {
-              type: Type.STRING,
-              description: 'Extensive rationale detailing diagnostic criteria confirmations, subscore evaluations, pharmacology targets, and differential rule-outs.'
+              items: {
+                type: Type.OBJECT,
+                required: ['id', 'front', 'back'],
+                properties: {
+                  id: { type: Type.STRING },
+                  front: { type: Type.STRING },
+                  back: { type: Type.STRING },
+                  hint: { type: Type.STRING }
+                }
+              }
             }
           }
         }
       }
     });
 
-    const parsedJson = JSON.parse(response.text || '{}');
-    return res.json({
-      ...parsedJson,
-      isFallback: false
-    });
+    const parsed = JSON.parse(response.text || '{"cards":[]}');
+    return res.json({ cards: parsed.cards || [], isFallback: false });
+
   } catch (err: any) {
-    console.error('Gemini question formulation error:', err.message || err);
-    return res.json({ isFallback: true, msg: err.message || 'API failed' });
+    console.error('Gemini deck generation error:', err.message || err);
+    return res.json({ isFallback: true, msg: err.message || 'Gemini API failed to generate deck' });
+  }
+});
+
+app.post('/api/generate-deck', async (req, res) => {
+  const claude = getClaude();
+  // gemini removed
+
+  if (!claude && !gemini) {
+    return res.json({ isFallback: true, msg: 'No AI key configured.' });
+  }
+
+  try {
+    if (claude) {
+      // ... Claude call above ...
+    } else {
+      // ... your existing Gemini block ...
+    }
+  } catch (err) {
+    // optionally retry with gemini here
   }
 });
 
@@ -162,7 +159,7 @@ Format your output in clean Markdown with clear paragraph structure.`,
 
 app.post('/api/generate-deck', async (req, res) => {
   const { textPayload, fileContent, fileName, chunkIndex, totalChunks } = req.body;
-  const ai = getGemini();
+  const ai = getClaude();
 
   if (!ai) {
     return res.json({ 
