@@ -1,10 +1,10 @@
 {
-  apiKey: "AIzaSyCq5VQWQ87IO2gbiuwFhwL9VLVZj2jVv6I",
-  authDomain: "boardpassph-v3.firebaseapp.com",
-  databaseURL: "https://boardpassph-v3-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "boardpassph-v3",
-  storageBucket: "boardpassph-v3.firebasestorage.app",
-  messagingSenderId: "574216595814",
-  appId: "1:574216595814:web:db4d8cdeec3539666880a7",
-  measurementId: "G-3SJ5WBK5MY"
+  "apiKey": "AIzaSyCq5VQWQ87IO2gbiuwFhwL9VLVZj2jVv6I",
+  "authDomain": "boardpassph-v3.firebaseapp.com",
+  "databaseURL": "https://boardpassph-v3-default-rtdb.asia-southeast1.firebasedatabase.app",
+  "projectId": "boardpassph-v3",
+  "storageBucket": "boardpassph-v3.firebasestorage.app",
+  "messagingSenderId": "574216595814",
+  "appId": "1:574216595814:web:db4d8cdeec3539666880a7",
+  "measurementId": "G-3SJ5WBK5MY"
 }
