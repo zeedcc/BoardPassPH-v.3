@@ -386,7 +386,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   };
 
   // Helper function to split text into semantic chunks for robust serverless processing
-  const splitTextIntoSemanticChunks = (text: string, maxChunkSize: number = 12000): string[] => {
+  const splitTextIntoSemanticChunks = (text: string, maxChunkSize: number = 6000): string[] => {
     if (text.length <= maxChunkSize) {
       return [text];
     }
@@ -449,9 +449,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     try {
       const fullText = `${rawNotes}\n${rawFileText}`.trim();
       
-      // Split into safe chunks of exactly 12,000 characters to bypass serverless timeouts (10 seconds)
-      // 12k characters ~ 2,400 words works perfectly within 3-5 seconds on serverless
-      let chunks = splitTextIntoSemanticChunks(fullText, 12000);
+      // Split into safe chunks of exactly 6,000 characters to bypass serverless timeouts (10 seconds)
+      // 6k characters works perfectly within 3-5 seconds on serverless
+      let chunks = splitTextIntoSemanticChunks(fullText, 6000);
       const originalChunkLength = chunks.length;
       
       // Cap at 10 chunks to prevent socket overflow/rate limiting on massive files or textbooks
@@ -507,7 +507,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         setAiDeckTitle(selectedFile ? `AI - ${selectedFile.name.split('.')[0]}` : `AI - Chapter Review ${new Date().toLocaleDateString()}`);
 
         if (originalChunkLength > 10) {
-          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nExtracted first 10 core sections (${chunks.length * 12000} chars) to guarantee full learning depth and stability. Generated a master clinical deck of ${allCards.length} index cards!`);
+          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nExtracted first 10 core sections (${chunks.length * 6000} chars) to guarantee full learning depth and stability. Generated a master clinical deck of ${allCards.length} index cards!`);
         } else if (chunks.length > 1) {
           alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nWe successfully processed ${chunks.length} distinct sections sequentially and structured a master deck of ${allCards.length} clinical cards. Happy learning!`);
         }
