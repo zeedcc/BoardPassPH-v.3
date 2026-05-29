@@ -784,7 +784,8 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         const keys = Object.keys(room.participants);
         if (keys.length > 0) {
           const allSubmitted = keys.every(k => room.participants[k].submittedAnswer);
-          setPlayersDoneSubmitting(allSubmitted);
+          // Unblock proceed if all submitted OR if we are already in reveal/finished state
+          setPlayersDoneSubmitting(allSubmitted || room.status === 'reveal' || room.status === 'finished');
 
           // AUTO-REVEAL Logic: If everyone is done and I'm the host, automatically reveal
           if (allSubmitted && room.status === 'active' && room.hostEmail === profile.email) {
@@ -1112,7 +1113,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         if (updatedParticipants[memberKey]) {
           updatedParticipants[memberKey].selfRating = rating;
           updatedParticipants[memberKey].score = (updatedParticipants[memberKey].score || 0) + scoreGain;
-          updatedParticipants[memberKey].submittedAnswer = false; // Reset submission flag
+          // Keep submittedAnswer as true so playersDoneSubmitting doesn't flip back to false and lock the UI
         }
 
         await updateDoc(docRef, { participants: updatedParticipants });
