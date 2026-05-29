@@ -8,12 +8,26 @@ import {
   onAuthStateChanged,
   signInAnonymously,
 } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, Firestore } from 'firebase/firestore';
 
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+const customDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const defaultDb = getFirestore(app);
+
+let activeDb: Firestore = customDb;
+
+export const db = new Proxy({} as any, {
+  get(target, prop, receiver) {
+    return Reflect.get(activeDb, prop, receiver);
+  },
+  set(target, prop, value, receiver) {
+    return Reflect.set(activeDb, prop, value, receiver);
+  }
+}) as Firestore;
+
 export const auth = getAuth();
 
 export {
@@ -48,24 +62,80 @@ export function initializeFirebase() {
 }
 
 async function testConnection() {
+  // Prevent redundant connection tests during active session
+  if (typeof window !== 'undefined' && window.sessionStorage?.getItem('bp_firestore_connected')) {
+    const savedId = window.sessionStorage.getItem('bp_firestore_connected_id');
+    if (savedId === 'default') {
+      activeDb = defaultDb;
+    } else if (savedId === 'custom') {
+      activeDb = customDb;
+    }
+    return;
+  }
+
+  console.log("Starting Firestore database discovery testing...");
+
+  const testDb = async (dbInstance: Firestore, name: string) => {
+    try {
+      await getDocFromServer(doc(dbInstance, 'test', 'connection'));
+      return name;
+    } catch (err: any) {
+      const msg = err?.message || '';
+      // If it's permission-denied or standard validation rule rejection, the DB exists and is responsive!
+      if (
+        msg.includes('permission') || 
+        msg.includes('Permission') || 
+        msg.includes('rules') || 
+        msg.includes('unauthenticated')
+      ) {
+        return name;
+      }
+      throw err;
+    }
+  };
+
+  const testCustom = testDb(customDb, 'custom')
+    .then(() => {
+      console.log(`Successfully reached custom database: ${firebaseConfig.firestoreDatabaseId}`);
+      activeDb = customDb;
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem('bp_firestore_connected', 'true');
+        window.sessionStorage.setItem('bp_firestore_connected_id', 'custom');
+      }
+      return 'custom';
+    });
+
+  const testDefault = testDb(defaultDb, 'default')
+    .then(() => {
+      console.log("Successfully reached default '(default)' database.");
+      activeDb = defaultDb;
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem('bp_firestore_connected', 'true');
+        window.sessionStorage.setItem('bp_firestore_connected_id', 'default');
+      }
+      return 'default';
+    });
+
   try {
-    // Prevent redundant connection tests during active session
-    if (typeof window !== 'undefined' && window.sessionStorage?.getItem('bp_firestore_connected')) {
-      return;
-    }
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.setItem('bp_firestore_connected', 'true');
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      const msg = error.message;
-      firebaseStatus.errorMessage = msg;
-      if (msg.includes("Database '(default)' not found")) {
-        firebaseStatus.firestoreDatabaseMissing = true;
-        console.error('Firestore default database not found. Please create a Firestore database in your Firebase project.');
-      } else if (msg.includes('the client is offline')) {
-        console.error('Please check your Firebase configuration or network status.');
+    // Race them. If one succeeds fast, select it.
+    await Promise.race([
+      testCustom,
+      testDefault,
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Discovery timed out')), 2500))
+    ]);
+  } catch (err) {
+    // If racing timed out or failed, check sequential fallback:
+    try {
+      await testCustom;
+    } catch {
+      try {
+        await testDefault;
+      } catch (finalError: any) {
+        const msg = finalError?.message || String(finalError);
+        firebaseStatus.errorMessage = msg;
+        console.error("All Firestore database connection attempts failed:", finalError);
+        // Default back to custom as final fallback
+        activeDb = customDb;
       }
     }
   }
