@@ -31,8 +31,10 @@ export const firebaseStatus = {
   errorMessage: ''
 };
 
-export function initializeFirebase() {
-  signInAnonymously(auth).catch((err) => {
+export async function initializeFirebase() {
+  try {
+    await signInAnonymously(auth);
+  } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     firebaseStatus.authAnonymousDisabled = msg.includes('auth/admin-restricted-operation') || msg.includes('admin-restricted-operation');
     firebaseStatus.authOperationNotAllowed = msg.includes('auth/operation-not-allowed') || msg.includes('operation-not-allowed');
@@ -42,9 +44,9 @@ export function initializeFirebase() {
     } else {
       console.warn('Firebase Auth anonymous login failed:', err);
     }
-  });
+  }
 
-  testConnection();
+  await testConnection();
 }
 
 async function testConnection() {

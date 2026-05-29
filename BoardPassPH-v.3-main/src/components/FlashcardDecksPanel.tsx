@@ -7,7 +7,7 @@ import {
   Mic, MicOff, Volume2, CircleDot, Radio, Square, Zap, Key, Flame, Heart, ChevronDown
 } from 'lucide-react';
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, initializeFirebase, firestoreWithTimeout } from '../firebase';
 import { UserProfile, Flashcard, FlashcardDeck, GroupRecallRoom } from '../types';
 
 interface FlashcardDecksPanelProps {
@@ -968,13 +968,16 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     };
 
     try {
-      await setDoc(doc(db, 'liveRecallSessions', roomId), newRoom);
+      await initializeFirebase();
+      const roomPayload = JSON.parse(JSON.stringify(newRoom));
+      await firestoreWithTimeout(setDoc(doc(db, 'liveRecallSessions', roomId), roomPayload), 4500);
       
       // Subscribe real-time
       subscribeToLiveRecallSession(roomId);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to host Active Recall room:", err);
-      alert("Error initiating multiplayer lobby. Try again as peer.");
+      const message = err?.message || String(err) || 'Unknown connection error';
+      alert(`Error initiating multiplayer lobby: ${message}. Try again as peer, and verify Firestore status in browser console.`);
     } finally {
       setSessionRoomLoading(false);
     }
@@ -1670,7 +1673,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
           // Write our answer to the reverse path
           await setDoc(
             doc(db, `liveRecallSessions/${roomId}/signaling/${myEmailKey}__to__${remoteEmailKey}`),
-            { answer: answer.toJSON(), ts: Date.now() },
+            { answer: { type: answer.type, sdp: answer.sdp }, ts: Date.now() },
             { merge: true }
           );
         } catch (e) {
@@ -1734,7 +1737,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
       await setDoc(
         doc(db, `liveRecallSessions/${roomId}/signaling/${myEmailKey}__to__${remoteEmailKey}`),
-        { offer: offer.toJSON(), ts: Date.now() },
+        { offer: { type: offer.type, sdp: offer.sdp }, ts: Date.now() },
         { merge: true }
       );
 
