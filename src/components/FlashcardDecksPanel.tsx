@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Layers, Plus, Search, Share2, Play, Send, Upload, Sparkles, 
   Smile, Check, X, ChevronLeft, ChevronRight, Info, Users, Globe, Lock, 
@@ -23,6 +24,8 @@ const VIRTUAL_PEERS = [
 
 // Pre-seeded local decks based on PmLE curriculum
 const SAMPLE_DECKS: FlashcardDeck[] = [];
+
+const BOARD_ITEM_TIMER_DURATION = 60; // Standard board exam time per item
 
 export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profile, setProfile }) => {
   const [activeSubTab, setActiveSubTab] = useState<'my-decks' | 'ai-generator' | 'public-decks' | 'live-recall'>('my-decks');
@@ -65,6 +68,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [isSoloMode, setIsSoloMode] = useState(false);
   const [activeRoomMessageInput, setActiveRoomMessageInput] = useState('');
   const [sessionRoomLoading, setSessionRoomLoading] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
   // Voice Recording and voice lounge states
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
@@ -964,6 +968,29 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     return () => clearTimeout(timer);
   }, [activeSessionRoom?.id, isSoloMode]);
 
+  // Synchronized countdown timer logic
+  useEffect(() => {
+    if (!activeSessionRoom || !activeSessionRoom.timerExpiresAt || activeSessionRoom.status !== 'active') {
+      setSecondsLeft(null);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      const expires = new Date(activeSessionRoom.timerExpiresAt!).getTime();
+      const diff = Math.max(0, Math.floor((expires - now) / 1000));
+      
+      setSecondsLeft(diff);
+
+      // If I'm the host and timer hits 0, auto-reveal
+      if (diff === 0 && activeSessionRoom.hostEmail === profile.email) {
+        handleHostRevealAnswerBack();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeSessionRoom?.timerExpiresAt, activeSessionRoom?.status, activeSessionRoom?.hostEmail, profile.email]);
+
   // Simulate AI peers "Speaking" briefly when they submit an answer or comment
   useEffect(() => {
     if (!activeSessionRoom || !isSoloMode) return;
@@ -1011,10 +1038,14 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const handleStartGroupSessionActive = async () => {
     if (!activeSessionRoom) return;
 
+    const expiresAt = new Date();
+    expiresAt.setSeconds(expiresAt.getSeconds() + BOARD_ITEM_TIMER_DURATION);
+
     try {
       const docRef = doc(db, 'liveRecallSessions', activeSessionRoom.id);
       await updateDoc(docRef, {
         status: 'active',
+        timerExpiresAt: expiresAt.toISOString(),
         chatMessages: arrayUnion({
           id: `msg-${Date.now()}`,
           senderName: "Host Bot",
@@ -1056,10 +1087,14 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     if (!activeSessionRoom) return;
     if (newIdx < 0 || newIdx >= activeSessionRoom.cards.length) return;
 
+    const expiresAt = new Date();
+    expiresAt.setSeconds(expiresAt.getSeconds() + BOARD_ITEM_TIMER_DURATION);
+
     try {
       const docRef = doc(db, 'liveRecallSessions', activeSessionRoom.id);
       await updateDoc(docRef, { 
         currentCardIndex: newIdx,
+        timerExpiresAt: expiresAt.toISOString(),
         status: 'active' // Ensure it resets to active if it was reveal
       });
       setMyWrittenAnswer('');
@@ -1142,9 +1177,13 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
           updatedParticipants[key].selfRating = null;
         });
 
+        const expiresAt = new Date();
+        expiresAt.setSeconds(expiresAt.getSeconds() + BOARD_ITEM_TIMER_DURATION);
+
         await updateDoc(docRef, {
           status: isFinished ? 'finished' : 'active',
           currentCardIndex: isFinished ? activeSessionRoom.currentCardIndex : nextIdx,
+          timerExpiresAt: isFinished ? null : expiresAt.toISOString(),
           participants: updatedParticipants
         });
 
@@ -1616,10 +1655,30 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                   <div className="px-4 flex-1 overflow-y-auto">
                     <div className="max-w-md mx-auto w-full space-y-6 pb-20">
                       <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 flex flex-col overflow-hidden">
+                        {/* Synchronized Board Exam Timer */}
+                        {secondsLeft !== null && (
+                          <div className="h-1.5 w-full bg-gray-50 flex overflow-hidden">
+                            <motion.div 
+                              initial={{ width: '100%' }}
+                              animate={{ width: `${(secondsLeft / BOARD_ITEM_TIMER_DURATION) * 100}%` }}
+                              transition={{ duration: 1, ease: 'linear' }}
+                              className={`h-full ${secondsLeft < 15 ? 'bg-rose-500' : 'bg-pine'}`}
+                            />
+                          </div>
+                        )}
+
                         <div className="p-6 pb-4">
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Zap className="w-3.5 h-3.5 text-green-500 fill-green-500" />
-                            <span className="text-[9px] font-black text-green-600 uppercase tracking-widest">High Yield Concept</span>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Zap className="w-3.5 h-3.5 text-green-500 fill-green-500" />
+                              <span className="text-[9px] font-black text-green-600 uppercase tracking-widest">High Yield Concept</span>
+                            </div>
+                            {secondsLeft !== null && (
+                              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${secondsLeft < 15 ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-gray-50 text-gray-400'}`}>
+                                <RefreshCw className={`w-2.5 h-2.5 ${secondsLeft < 15 ? 'animate-spin' : ''}`} />
+                                <span className="text-[10px] font-black font-mono">{secondsLeft}s</span>
+                              </div>
+                            )}
                           </div>
                           <h2 className="text-lg font-black text-gray-900 leading-snug tracking-tight">
                             {activeSessionRoom.cards[activeSessionRoom.currentCardIndex].front}
@@ -1670,47 +1729,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                             </div>
                           )}
                         </div>
-                      </div>
-
-                      {/* Bottom Utility Actions */}
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <button 
-                            onClick={() => alert(`Contextual retrieval cue: ${activeSessionRoom.cards[activeSessionRoom.currentCardIndex].hint || "Think of the primary psychopathology hallmarks."}`)}
-                            className="flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-100 rounded-full text-[10px] font-black text-gray-600 shadow-xs cursor-pointer hover:bg-gray-50 transition"
-                          >
-                            <Key className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                            Use Hint Key
-                          </button>
-                          <button 
-                            onClick={() => {
-                              const memberKey = profile.email.replace(/\./g, '_');
-                              if (!activeSessionRoom.participants[memberKey]?.submittedAnswer) {
-                                setProfile(prev => prev ? ({ ...prev, totalXp: Math.max(0, prev.totalXp - 5) }) : prev);
-                                alert("Penalty: -5 XP for using reveal before making a clinical choice!");
-                              }
-                              handleSubmitMyWrittenRecallAnswer(activeSessionRoom.cards[activeSessionRoom.currentCardIndex].correctOption);
-                            }}
-                            className="flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-100 rounded-full text-[10px] font-black text-gray-600 shadow-xs cursor-pointer hover:bg-gray-50 transition"
-                          >
-                            <BookOpen className="w-3.5 h-3.5 text-rose-500" />
-                            Reveal Answer
-                          </button>
-                        </div>
-                        <button 
-                          onClick={() => {
-                            const memberKey = profile.email.replace(/\./g, '_');
-                            if (activeSessionRoom.participants[memberKey]?.submittedAnswer || activeSessionRoom.status === 'reveal') {
-                              alert(`Rationale: ${activeSessionRoom.cards[activeSessionRoom.currentCardIndex].back}`);
-                            } else {
-                              alert("Unlock rationale by submitting your answer first!");
-                            }
-                          }}
-                          className="w-full flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-100 rounded-full text-[10px] font-black text-gray-600 shadow-xs cursor-pointer hover:bg-gray-50 transition"
-                        >
-                          <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] text-white">i</div>
-                          Detailed Explanation
-                        </button>
                       </div>
 
                       {/* Manual Navigation - Host Only & Sync Locked */}
@@ -2877,7 +2895,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                 <div>
                   <h5 className="font-bold text-sm">Pro Tip: Study Synchronization</h5>
                   <p className="text-xs leading-relaxed opacity-85 mt-0.5">
-                    In the Arena, everyone sees the same card at the exact same second. Once you type your recall statement, you'll see who else is done. The Host can reveal the answer when everyone is ready!
+                    In the Arena, everyone sees the same card at the exact same second. Once you submit your choice, you'll see who else is done. The Answer and Rationalization will reveal automatically once all candidates have submitted!
                   </p>
                 </div>
               </div>
