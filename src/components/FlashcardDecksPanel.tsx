@@ -659,53 +659,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   }
 };
 
-          if (data.card) {
-            const card = data.card;
-            allCards.push({
-              id: `card-chunk-${i}-${Date.now()}-${Math.random()}`,
-              front: card.front,
-              back: card.back,
-              hint: card.hint || '',
-              options: card.options || [],
-              correctOption: card.correctOption || ''
-            });
-          }
-
-          if (data.error) {
-            throw new Error(data.error);
-          }
-        } catch (parseErr) {
-          // skip malformed lines
-        }
-      }
-    }
-
-  } catch (err: any) {
-    console.warn(`Error generating chunk ${i + 1}:`, err);
-    throw new Error(`Failed on section ${i + 1}: ${err.message || err}`);
-  }
-      }
-
-      if (allCards.length > 0) {
-        setAiGenResult(allCards);
-        setAiDeckTitle(selectedFile ? `AI - ${selectedFile.name.split('.')[0]}` : `AI - Chapter Review ${new Date().toLocaleDateString()}`);
-
-        if (originalChunkLength > 10) {
-          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nExtracted first 10 core sections (${chunks.length * 6000} chars) to guarantee full learning depth and stability. Generated a master clinical deck of ${allCards.length} index cards!`);
-        } else if (chunks.length > 1) {
-          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nWe successfully processed ${chunks.length} distinct sections sequentially and structured a master deck of ${allCards.length} clinical cards. Happy learning!`);
-        }
-      } else {
-        alert("Failed to synthesize flashcards. Please double check that process.env.GEMINI_API_KEY is configured correctly in Settings > Secrets.");
-      }
-    } catch (err: any) {
-      console.warn("AI deck generation client error:", err);
-      alert(`AI deck generator failed.\n\nDetails: ${err.message || err}\n\nPlease check your internet connection or verify in Settings > Secrets if GEMINI_API_KEY is set.`);
-    } finally {
-      setIsGeneratingDeckAI(false);
-      setAiGenerationProgressText('');
-    }
-  };
 
   const handleCreateNewManualDeck = () => {
     setNewDeckTitle('');
