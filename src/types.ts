@@ -183,5 +183,6 @@ export interface GroupRecallRoom {
   createdAt: string;
   lastActiveAt: string;
   timerExpiresAt?: string; // ISO string for synchronized countdown
+  timerDuration?: number; // Duration in seconds
 }
 

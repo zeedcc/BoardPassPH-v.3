@@ -134,8 +134,6 @@ const FlashcardDeckItem: React.FC<{
 // Pre-seeded local decks based on PmLE curriculum
 const SAMPLE_DECKS: FlashcardDeck[] = [];
 
-const BOARD_ITEM_TIMER_DURATION = 20; // 20s per board item as requested
-
 export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profile, setProfile }) => {
   const [activeSubTab, setActiveSubTab] = useState<'my-decks' | 'ai-generator' | 'public-decks' | 'live-recall'>('my-decks');
   
@@ -179,6 +177,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [activeRoomMessageInput, setActiveRoomMessageInput] = useState('');
   const [sessionRoomLoading, setSessionRoomLoading] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [selectedTimerDuration, setSelectedTimerDuration] = useState(60);
 
   // Voice Recording and voice lounge states
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
@@ -893,6 +892,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       hostEmail: profile.email,
       hostName: myName,
       status: 'lobby',
+      timerDuration: selectedTimerDuration,
       currentCardIndex: 0,
       participants: initialParticipants,
       chatMessages: [
@@ -1249,7 +1249,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     if (!activeSessionRoom) return;
 
     const expiresAt = new Date();
-    expiresAt.setSeconds(expiresAt.getSeconds() + BOARD_ITEM_TIMER_DURATION);
+    expiresAt.setSeconds(expiresAt.getSeconds() + (activeSessionRoom.timerDuration || 60));
 
     try {
       const docRef = doc(db, 'liveRecallSessions', activeSessionRoom.id);
@@ -1290,10 +1290,11 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
     if (isCorrect) {
       if (secondsLeft !== null) {
-        if (secondsLeft >= 15) {
+        const duration = activeSessionRoom.timerDuration || 60;
+        if (secondsLeft >= duration * 0.5) {
           rating = 'perfect'; // Blitz
           scoreGain = 10;
-        } else if (secondsLeft >= 5) {
+        } else if (secondsLeft >= duration * 0.15) {
           rating = 'vague'; // Rapid
           scoreGain = 7;
         } else {
@@ -1337,7 +1338,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     if (newIdx < 0 || newIdx >= activeSessionRoom.cards.length) return;
 
     const expiresAt = new Date();
-    expiresAt.setSeconds(expiresAt.getSeconds() + BOARD_ITEM_TIMER_DURATION);
+    expiresAt.setSeconds(expiresAt.getSeconds() + (activeSessionRoom.timerDuration || 60));
 
     try {
       const docRef = doc(db, 'liveRecallSessions', activeSessionRoom.id);
@@ -1392,7 +1393,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         });
 
         const expiresAt = new Date();
-        expiresAt.setSeconds(expiresAt.getSeconds() + BOARD_ITEM_TIMER_DURATION);
+        expiresAt.setSeconds(expiresAt.getSeconds() + (activeSessionRoom.timerDuration || 60));
 
         await updateDoc(docRef, {
           status: isFinished ? 'finished' : 'active',
@@ -1889,9 +1890,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                           <div className="h-1.5 w-full bg-gray-50 flex overflow-hidden">
                             <motion.div 
                               initial={{ width: '100%' }}
-                              animate={{ width: `${(secondsLeft / BOARD_ITEM_TIMER_DURATION) * 100}%` }}
+                              animate={{ width: `${(secondsLeft / (activeSessionRoom.timerDuration || 60)) * 100}%` }}
                               transition={{ duration: 1, ease: 'linear' }}
-                              className={`h-full ${secondsLeft < 15 ? 'bg-rose-500' : 'bg-pine'}`}
+                              className={`h-full ${secondsLeft < (activeSessionRoom.timerDuration || 60) * 0.25 ? 'bg-rose-500' : 'bg-pine'}`}
                             />
                           </div>
                         )}
@@ -1903,8 +1904,8 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                               <span className="text-[9px] font-black text-green-600 uppercase tracking-widest">High Yield Concept</span>
                             </div>
                             {secondsLeft !== null && (
-                              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${secondsLeft < 15 ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-gray-50 text-gray-400'}`}>
-                                <RefreshCw className={`w-2.5 h-2.5 ${secondsLeft < 15 ? 'animate-spin' : ''}`} />
+                              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${secondsLeft < (activeSessionRoom.timerDuration || 60) * 0.25 ? 'bg-rose-50 text-rose-600 animate-pulse' : 'bg-gray-50 text-gray-400'}`}>
+                                <RefreshCw className={`w-2.5 h-2.5 ${secondsLeft < (activeSessionRoom.timerDuration || 60) * 0.25 ? 'animate-spin' : ''}`} />
                                 <span className="text-[10px] font-black font-mono">{secondsLeft}s</span>
                               </div>
                             )}
@@ -3066,6 +3067,21 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                       >
                         <option value="multiplayer">👥 Peer Challenge (Play with Classmates)</option>
                         <option value="solo">🧑‍💻 Solo Arena (Play with AI Virtual Peers)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase font-black text-gray-400 block tracking-widest font-mono">
+                        Question Timer Duration:
+                      </label>
+                      <select
+                        value={selectedTimerDuration}
+                        onChange={(e) => setSelectedTimerDuration(Number(e.target.value))}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 text-xs font-bold outline-none focus:border-pine focus:bg-white shadow-sm transition"
+                      >
+                        <option value={15}>⚡ 15 Seconds (Blitz Mode)</option>
+                        <option value={30}>🔥 30 Seconds (Rapid Mode)</option>
+                        <option value={60}>⌛ 60 Seconds (Standard Exam Time)</option>
                       </select>
                     </div>
 
