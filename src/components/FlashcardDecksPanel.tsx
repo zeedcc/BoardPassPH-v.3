@@ -988,17 +988,19 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     }
   };
 
-  const handleSubmitMyWrittenRecallAnswer = async () => {
+  const handleSubmitMyWrittenRecallAnswer = async (directAnswer?: string) => {
     if (!activeSessionRoom) return;
-    if (!myWrittenAnswer.trim()) {
-      alert("Please type a recall statement first!");
+    const finalAnswer = directAnswer || myWrittenAnswer.trim();
+    
+    if (!finalAnswer) {
+      alert("Please type a recall statement or select an option first!");
       return;
     }
 
     const memberKey = profile.email.replace(/\./g, '_');
     const updatedParticipants = { ...activeSessionRoom.participants };
     if (updatedParticipants[memberKey]) {
-      updatedParticipants[memberKey].lastAnswerText = myWrittenAnswer.trim();
+      updatedParticipants[memberKey].lastAnswerText = finalAnswer;
       updatedParticipants[memberKey].submittedAnswer = true;
     }
 
@@ -1583,23 +1585,45 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                         <p className="text-[10px] text-gray-400">Waiting for other reviewees to type...</p>
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-mono uppercase font-black text-gray-400 tracking-wider">
-                          Type Your Answer (Self-evaluated shortly)
-                        </label>
-                        <textarea
-                          rows={3}
-                          value={myWrittenAnswer}
-                          onChange={(e) => setMyWrittenAnswer(e.target.value)}
-                          placeholder="Type what you retrieve from long-term memory about this diagnosis..."
-                          className="w-full bg-gray-50 border border-gray-250 focus:bg-white focus:border-pine rounded-2xl p-4 text-xs font-medium outline-none transition"
-                        />
-                        <button
-                          onClick={handleSubmitMyWrittenRecallAnswer}
-                          className="w-full py-2.5 bg-pine hover:bg-pine-mid text-white text-xs font-black uppercase tracking-widest rounded-xl transition border-b-2 border-pine-mid"
-                        >
-                          Submit Answer to Board
-                        </button>
+                      <div className="space-y-4">
+                        {activeSessionRoom.cards[activeSessionRoom.currentCardIndex].options?.length ? (
+                          <div className="space-y-3">
+                            <label className="text-[10px] font-mono uppercase font-black text-gray-400 tracking-wider">
+                              Select Your True-to-Life Clinical Answer
+                            </label>
+                            <div className="grid grid-cols-1 gap-2">
+                              {activeSessionRoom.cards[activeSessionRoom.currentCardIndex].options.map((opt, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => handleSubmitMyWrittenRecallAnswer(opt)}
+                                  className="w-full px-5 py-3.5 bg-white border border-gray-200 hover:border-pine hover:bg-pine/5 hover:text-pine text-gray-700 text-xs font-semibold rounded-xl transition text-left cursor-pointer shadow-xs break-words"
+                                >
+                                  <span className="font-bold mr-2 text-gray-400">{String.fromCharCode(65 + idx)}.</span>
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-mono uppercase font-black text-gray-400 tracking-wider">
+                              Type Your Answer (Self-evaluated shortly)
+                            </label>
+                            <textarea
+                              rows={3}
+                              value={myWrittenAnswer}
+                              onChange={(e) => setMyWrittenAnswer(e.target.value)}
+                              placeholder="Type what you retrieve from long-term memory about this diagnosis..."
+                              className="w-full bg-gray-50 border border-gray-250 focus:bg-white focus:border-pine rounded-2xl p-4 text-xs font-medium outline-none transition"
+                            />
+                            <button
+                              onClick={() => handleSubmitMyWrittenRecallAnswer()}
+                              className="w-full py-2.5 bg-pine hover:bg-pine-mid text-white text-xs font-black uppercase tracking-widest rounded-xl transition border-b-2 border-pine-mid cursor-pointer"
+                            >
+                              Submit Answer to Board
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 

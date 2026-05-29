@@ -230,8 +230,10 @@ app.post('/api/generate-deck', async (req, res) => {
 
     const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Your duty is to read the user's provided notes, study guides, or uploaded books, extract the most critical, high-yield concepts, terms, conditions, and theories, and convert them into high-quality Multiple Choice Question (MCQ) style active recall flashcards. WHERE APPLICABLE, use clinical case vignettes based on the notes as the question prompt to test applied knowledge.${progressContext}
 Format details:
-- Each card's 'front' must contain a thought-provoking active recall MCQ question (incorporating clinical case vignettes when suitable) followed by 4 distinct multiple choice options (labeled A, B, C, and D) cleanly separated by newlines.
-- Each card's 'back' must clearly state the correct option letter and answer along with a precise, concise clinical explanation. Keep it accurate, easy to digest, yet complete.
+- Each card's 'front' must contain just the thought-provoking active recall MCQ question (incorporating clinical case vignettes when suitable).
+- Provide the 4 multiple choice options inside the 'options' JSON array.
+- The 'correctOption' field MUST exactly match one of the options in the array.
+- Each card's 'back' must clearly state a concise, precise clinical explanation of why the correct option is right and the others are wrong.
 - Each 'hint' is a small cognitive mnemonic or cue to stimulate retrieval.
 
 Generate a highly optimized, high-yield deck of exactly 4 to 5 MCQ flashcards covering the key concepts and case vignettes from the material. Keep descriptions punchy and direct to prioritize fast learning and prevent API execution timeouts.
@@ -251,7 +253,7 @@ Return your response strictly in JSON matching the requested responseSchema.`;
               description: 'List of generated flashcard objects covering all important notes in the material',
               items: {
                 type: Type.OBJECT,
-                required: ['id', 'front', 'back'],
+                required: ['id', 'front', 'back', 'options', 'correctOption'],
                 properties: {
                   id: {
                     type: Type.STRING,
@@ -259,15 +261,24 @@ Return your response strictly in JSON matching the requested responseSchema.`;
                   },
                   front: {
                     type: Type.STRING,
-                    description: 'The front side of the flashcard containing the active recall prompt or question'
+                    description: 'The front side of the flashcard containing the active recall prompt or clinical vignette'
                   },
                   back: {
                     type: Type.STRING,
-                    description: 'The reverse side of the flashcard holding the detailed, precise answer'
+                    description: 'The reverse side of the flashcard holding the detailed, precise explanation'
                   },
                   hint: {
                     type: Type.STRING,
                     description: 'Optional retrieving cue or tip'
+                  },
+                  options: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: 'Exactly 4 multiple choice correct and distractor options'
+                  },
+                  correctOption: {
+                    type: Type.STRING,
+                    description: 'The exact string of the correct option from the options array'
                   }
                 }
               }

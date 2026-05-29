@@ -132,6 +132,8 @@ export interface Flashcard {
   front: string;
   back: string;
   hint?: string;
+  options?: string[];
+  correctOption?: string;
 }
 
 export interface FlashcardDeck {
