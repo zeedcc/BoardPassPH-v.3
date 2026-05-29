@@ -231,7 +231,7 @@ export const GroupStudyPanel: React.FC<GroupStudyPanelProps> = ({
   };
 
   const handleCreateRoom = async () => {
-    // Check 5-session limit
+    // Check 15-session limit
     const getHist = (): SessionHistoryEntry[] => {
       try {
         const data = localStorage.getItem(`bp_joined_sessions_${profile.email}`);
@@ -241,8 +241,8 @@ export const GroupStudyPanel: React.FC<GroupStudyPanelProps> = ({
       }
     };
     const hist = getHist();
-    if (hist.length >= 5) {
-      setErrorText("You have reached the limit of 5 live sessions. Please remove some from your History section first to start a new one.");
+    if (hist.length >= 15) {
+      setErrorText("You have reached the limit of 15 live sessions. Please remove some from your History section first to start a new one.");
       return;
     }
 
@@ -299,8 +299,8 @@ export const GroupStudyPanel: React.FC<GroupStudyPanelProps> = ({
     const hist = getHist();
     const isAlreadyMember = hist.some(h => h.roomId === cleanCode);
 
-    if (!isAlreadyMember && hist.length >= 5) {
-      setErrorText("You have reached the limit of 5 live sessions. Please remove some from your History section first to join a new one.");
+    if (!isAlreadyMember && hist.length >= 15) {
+      setErrorText("You have reached the limit of 15 live sessions. Please remove some from your History section first to join a new one.");
       return;
     }
 
@@ -642,19 +642,19 @@ export const GroupStudyPanel: React.FC<GroupStudyPanelProps> = ({
                 A persistent ledger of the live board rooms you have hosted or joined. Capped at <span className="font-bold text-pine">5 sessions maximum</span>.
               </p>
             </div>
-            <div className="text-left sm:text-right shrink-0">
-              <span className="text-xs font-mono font-bold text-gray-500 px-3 py-1 bg-gray-100 rounded-full">
-                {sessionHistory.length} / 5 Slots Used
-              </span>
-              <div className="w-24 bg-gray-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-300 ${
-                    sessionHistory.length >= 5 ? 'bg-rose-500' : 'bg-[#2f4939]'
-                  }`} 
-                  style={{ width: `${(sessionHistory.length / 5) * 100}%` }}
-                />
+              <div className="text-left sm:text-right shrink-0">
+                <span className="text-xs font-mono font-bold text-gray-500 px-3 py-1 bg-gray-100 rounded-full">
+                  {sessionHistory.length} / 15 Slots Used
+                </span>
+                <div className="w-24 bg-gray-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-300 ${
+                      sessionHistory.length >= 15 ? 'bg-rose-500' : 'bg-[#2f4939]'
+                    }`} 
+                    style={{ width: `${(sessionHistory.length / 15) * 100}%` }}
+                  />
+                </div>
               </div>
-            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

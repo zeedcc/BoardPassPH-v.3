@@ -6,7 +6,7 @@ import {
   ArrowLeft, Copy, Trophy, RefreshCw, ThumbsUp, MessageSquare, BookOpen, AlertCircle,
   Mic, MicOff, Volume2, CircleDot, Radio, Square, Zap, Key, Flame, Heart, ChevronDown
 } from 'lucide-react';
-import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { UserProfile, Flashcard, FlashcardDeck, GroupRecallRoom } from '../types';
 
@@ -132,12 +132,161 @@ const FlashcardDeckItem: React.FC<{
 };
 
 // Pre-seeded local decks based on PmLE curriculum
-const SAMPLE_DECKS: FlashcardDeck[] = [];
-
-// Must be defined outside component so it can be used in useState initializer
-function SEED_PUBLIC_DECKS(): FlashcardDeck[] {
-  return SAMPLE_DECKS;
-}
+const SAMPLE_DECKS: FlashcardDeck[] = [
+  {
+    id: "deck-seed-dsm-abnormal",
+    title: "DSM-5-TR Clinical Case Files",
+    description: "High-yield diagnostic vignettes covering schizophrenia spectrumTimeline qualifiers, bipolar specifiers, and anxiety differentials.",
+    creatorEmail: "seed@boardpassph.com",
+    creatorName: "PmLE Advisory Board",
+    category: "Abnormal Psychology",
+    createdAt: new Date().toISOString(),
+    isPublic: true,
+    cards: [
+      {
+        id: "card-seed-1",
+        front: "A 24-year-old reviewee exhibits active-phase symptoms of schizophrenia (including somatic delusions, disorganized speech, and negative symptoms) lasting exactly 4 months. He has no history of depressive or manic episodes. What is the most precise DSM-5-TR diagnosis?",
+        back: "Schizophreniform Disorder requires active-phase symptoms lasting at least 1 month but less than 6 months. Brief Psychotic Disorder is less than 1 month, while Schizophrenia requires at least 6 months of continuous sign disturbance.",
+        hint: "Check the exact timeline constraint between brief psychotic, schizophreniform, and schizophrenia.",
+        options: [
+          "Brief Psychotic Disorder",
+          "Schizophreniform Disorder",
+          "Schizophrenia",
+          "Delusional Disorder"
+        ],
+        correctOption: "Schizophreniform Disorder"
+      },
+      {
+        id: "card-seed-2",
+        front: "A client reports chronic mild depressed mood for at least 2 years, accompanied by insomnia, fatigue, low self-esteem, and matching criteria with Dysthymia. However, during the assessment, she notes experiencing a clear major depressive episode in the first year. What is the correct diagnostic approach?",
+        back: "Persistent Depressive Disorder (Dysthymia) in DSM-5-TR consolidates chronic major depressive episodes and dysthymic episodes. Specifiers are added depending on whether major depressive episodes are present or absent.",
+        hint: "DSM-5-TR consolidated Chronic MDD and Dysthymic Disorder under PDD.",
+        options: [
+          "Double Depression Syndrome",
+          "Bipolar II Disorder",
+          "Persistent Depressive Disorder (PDD)",
+          "Major Depressive Disorder, Chronic specifier"
+        ],
+        correctOption: "Persistent Depressive Disorder (PDD)"
+      },
+      {
+        id: "card-seed-3",
+        front: "A client presents with panic attacks recurring spontaneously with intensive autonomic fear. She also fears taking the subway or walking in crowded public markets because escape would be difficult or embarrassing in case of panic. What dual diagnosis or single consolidated code should be assigned?",
+        back: "In DSM-5, Panic Disorder and Agoraphobia are coded as two separate diagnoses, even when panic symptoms are the direct trigger for public avoidance. This allows clinicians to track both conditions separately.",
+        hint: "Unlike DSM-IV, DSM-5 separated these into distinct diagnoses.",
+        options: [
+          "Panic Disorder with Agoraphobia",
+          "Panic Disorder and Agoraphobia (Dual Code)",
+          "Agoraphobia with Panic Attack modifier",
+          "Complex Phobic Anxiety Disorder"
+        ],
+        correctOption: "Panic Disorder and Agoraphobia (Dual Code)"
+      },
+      {
+        id: "card-seed-4",
+        front: "Which psychiatric specification describes a Major Depressive Episode characterized by a profound lack of pleasure, inability to respond to pleasurable stimuli, worse mood in the morning, waking early, and significant psychomotor change?",
+        back: "Melancholic features specifier is defined by absolute anhedonia, lack of mood reactivity, early morning depression, psychomotor retardation or agitation, anorexia, and waking earlier.",
+        hint: "Morning exacerbation is a hallmark of this endogenous/clinical presentation.",
+        options: [
+          "Atypical features",
+          "Melancholic features",
+          "Catatonic features",
+          "Anxious distress"
+        ],
+        correctOption: "Melancholic features"
+      }
+    ]
+  },
+  {
+    id: "deck-seed-assessment",
+    title: "Psychometric Assessment & Scale Mechanics",
+    description: "Board items reviewing validity scales, neuropsychological indices, testing laws, and reliability calculations.",
+    creatorEmail: "seed@boardpassph.com",
+    creatorName: "PmLE Advisory Board",
+    category: "Psychological Assessment",
+    createdAt: new Date().toISOString(),
+    isPublic: true,
+    cards: [
+      {
+        id: "card-seed-5",
+        front: "A candidate finishes the MMPI-3 test with a significantly elevated 'L' (Lie) Scale and an elevated 'K' (Correction) scale, alongside a extremely low 'F' (Infrequency) scale. What test-taking attitude is most clearly reflected?",
+        back: "Elevated L and K scales accompanied by a low F scale indicate a 'faking good' attitude, social desirability bias, or defensiveness, in which the respondent is denying common psychological flaws.",
+        hint: "L (Lie) is simple denial; K is sophisticated correction defensiveness. F is faking bad.",
+        options: [
+          "Malingering (Faking Bad)",
+          "Defensive adaptation (Faking Good)",
+          "Random/careless answering",
+          "All-true acquiescence response set"
+        ],
+        correctOption: "Defensive adaptation (Faking Good)"
+      },
+      {
+        id: "card-seed-6",
+        front: "If a psychological test possesses a Cronbach's Alpha coefficient of 0.85, but the standard deviation of the test score is 10, what is the Standard Error of Measurement (SEM) of this assessment tool?",
+        back: "SEM = SD * sqrt(1 - r). Here, SEM = 10 * sqrt(1 - 0.85) = 10 * sqrt(0.15) ≈ 10 * 0.387 = 3.87.",
+        hint: "The formula is: SEM = SD * sqrt(1 - Reliability Coefficient).",
+        options: [
+          "1.50",
+          "3.87",
+          "8.50",
+          "10.00"
+        ],
+        correctOption: "3.87"
+      },
+      {
+        id: "card-seed-7",
+        front: "In WAIS-IV, which core index represents the ability to temporarily hold, manipulate, and compute numeric sequences to solve complex logical problems?",
+        back: "Working Memory Index (WMI) consists of Digit Span and Arithmetic subtests, measuring attention, concentration, and mental manipulation of internal information.",
+        hint: "Not related to raw speed or visual construction.",
+        options: [
+          "Verbal Comprehension Index",
+          "Perceptual Reasoning Index",
+          "Working Memory Index",
+          "Processing Speed Index"
+        ],
+        correctOption: "Working Memory Index"
+      }
+    ]
+  },
+  {
+    id: "deck-seed-ethics-law",
+    title: "Ethics & Republic Act 10029 Laws",
+    description: "Essential Philippine board recall pointers on the Psychology Law (RA 10029), PAP Code of Ethics, and legal boundaries of psychometric practice.",
+    creatorEmail: "seed@boardpassph.com",
+    creatorName: "PAP Compliance Committee",
+    category: "Psychological Assessment",
+    createdAt: new Date().toISOString(),
+    isPublic: true,
+    cards: [
+      {
+        id: "card-seed-8",
+        front: "Under Republic Act 10029, also known as the Philippine Psychology Act of 2009, which of the following tasks is a licensed Psychometrician strictly authorized to perform independently?",
+        back: "Under RA 10029, a licensed Psychometrician is legally authorized to administer, score, and write draft psychological assessment profiles under the supervision of a licensed psychologist.",
+        hint: "Draft profiling and psychometrics are under strict psychologist supervision parameters.",
+        options: [
+          "Conducting clinical interventions for psychotic disorders",
+          "Signing off on final medico-legal psychological profiles",
+          "Administering, scoring, and drafting test assessment profiles",
+          "Sponsoring mental health educational therapy programs independently"
+        ],
+        correctOption: "Administering, scoring, and drafting test assessment profiles"
+      },
+      {
+        id: "card-seed-9",
+        front: "A corporate client requests copies of raw psychological test sheets representing several employees evaluated for succession planning. In accordance with the PAP Ethical Principles, how can the psychometrician comply?",
+        back: "Raw test data must never be disclosed to unqualified authorities or corporate HR, as doing so compromises test security and patient confidentiality. Only interpretive final summary profiles may be shared.",
+        hint: "Maintain test security and respect professional release boundaries.",
+        options: [
+          "Hand over all raw response bubble sheets directly to HR",
+          "Explain that raw test sheets cannot be disclosed; only interpretative summaries may be released",
+          "Ask the employees to scan and submit the sheets themselves",
+          "Post the test items online for executive review"
+        ],
+        correctOption: "Explain that raw test sheets cannot be disclosed; only interpretative summaries may be released"
+      }
+    ]
+  }
+];
 
 export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profile, setProfile }) => {
   const [activeSubTab, setActiveSubTab] = useState<'my-decks' | 'ai-generator' | 'public-decks' | 'live-recall'>('my-decks');
@@ -166,7 +315,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [deckApiKey, setDeckApiKey] = useState(() => {
     return localStorage.getItem(`bp_gemini_api_key_${profile.email}`) || '';
   });
-  const [numCardsToGenerate, setNumCardsToGenerate] = useState<number>(50);
   
   // Public Decks pool
   const [publicDecks, setPublicDecks] = useState<FlashcardDeck[]>(SEED_PUBLIC_DECKS());
@@ -195,33 +343,15 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const voxTimerRef = useRef<any>(null);
   const roomUnsubscribeRef = useRef<(() => void) | null>(null);
   const isAutoRecordingRef = useRef(false);
-  // Ref to avoid stale closure in countdown timer useEffect
-  const hostRevealRef = useRef<(() => Promise<void>) | null>(null);
-  const recordingSecondsRef = useRef(0);
 
   // Live Voice Lounge Connection
   const [voiceLoungeConnected, setVoiceLoungeConnected] = useState(false);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
   const [localVoiceVolume, setLocalVoiceVolume] = useState(0); // 0 to 100
-  // Refs to avoid stale closures in requestAnimationFrame callback
-  const voiceLoungeConnectedRef = useRef(false);
-  const isVoiceMutedRef = useRef(false);
-  const isRecordingVoiceRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const rafIdRef = useRef<number | null>(null);
-
-  // ── WebRTC live voice ──────────────────────────────────────────────────────
-  // peerConnections: keyed by remote participant's emailKey (dots replaced with _)
-  const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
-  // remoteAudio elements: one per remote peer, kept alive in a ref so GC won't kill them
-  const remoteAudioElementsRef = useRef<Record<string, HTMLAudioElement>>({});
-  // Firestore unsubscribers for each peer's signaling sub-collection listener
-  const signalingUnsubsRef = useRef<Record<string, () => void>>({});
-  // Track which peers we have already initiated an offer toward
-  const offeredPeersRef = useRef<Set<string>>(new Set());
-  // ──────────────────────────────────────────────────────────────────────────
   
   // Load my-decks from localStorage or profile (prefer profile for cloud sync)
   useEffect(() => {
@@ -336,6 +466,10 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       return { ...prev, flashcardDecks: updated };
     });
   };
+
+  function SEED_PUBLIC_DECKS(): FlashcardDeck[] {
+    return SAMPLE_DECKS;
+  }
 
   // Dynamic client-side CDN script loaders to avoid heavy bundler size / node.js server-side 1MB POST payload size limits
   const loadPdfJs = (): Promise<any> => {
@@ -585,110 +719,102 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
   // Call Gemini backend to generate custom cards
   const handleTriggerAIGenerator = async () => {
-  const rawNotes = pastedNotes.trim();
-  const rawFileText = fileContentText.trim();
+    const rawNotes = pastedNotes.trim();
+    const rawFileText = fileContentText.trim();
+    
+    if (!rawNotes && !rawFileText) {
+      alert("Please either paste study notes or upload a text file first!");
+      return;
+    }
 
-  if (!rawNotes && !rawFileText) {
-    alert("Please either paste study notes or upload a text file first!");
-    return;
-  }
+    // AI Quota check (Double verify)
+    if (!deckApiKey || deckApiKey.trim() === '') {
+      alert("⚠️ Developer API Key Required: You must paste your own Gemini API Key below to synthesize AI Deck cards.");
+      return;
+    }
 
-  if (!deckApiKey || deckApiKey.trim() === '') {
-    alert("⚠️ Developer API Key Required: You must paste your own Gemini API Key below to synthesize AI Deck cards.");
-    return;
-  }
+    setIsGeneratingDeckAI(true);
+    setAiGenerationProgressText("Reading and dividing key chapters...");
+    setAiGenResult([]);
 
-  setIsGeneratingDeckAI(true);
-  setAiGenerationProgressText("Reading and chunking content...");
-  setAiGenResult([]);
+    try {
+      const fullText = `${rawNotes}\n${rawFileText}`.trim();
+      
+      // Split into safe chunks of exactly 6,000 characters to bypass serverless timeouts (10 seconds)
+      // 6k characters works perfectly within 3-5 seconds on serverless
+      let chunks = splitTextIntoSemanticChunks(fullText, 6000);
+      const originalChunkLength = chunks.length;
+      
+      // Cap at 10 chunks to prevent socket overflow/rate limiting on massive files or textbooks
+      if (chunks.length > 10) {
+        chunks = chunks.slice(0, 10);
+      }
 
-  try {
-    const fullText = `${rawNotes}\n${rawFileText}`.trim();
-
-    // Split content into semantic chunks so nothing is skipped
-    const CHUNK_SIZE = 6000;
-    const chunks = splitTextIntoSemanticChunks(fullText, CHUNK_SIZE);
-
-    // Calculate cards per chunk — distribute numCardsToGenerate across chunks,
-    // but always generate at least 1 card per chunk so the whole doc is covered.
-    const cardsPerChunk = Math.max(1, Math.ceil(numCardsToGenerate / chunks.length));
-    const TOTAL_CARDS = cardsPerChunk * chunks.length; // actual total, may exceed slider
-
-    const allCards: Flashcard[] = [];
-    let globalCardIndex = 0;
-
-    for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
-      const chunk = chunks[chunkIdx];
-
-      for (let localIdx = 1; localIdx <= cardsPerChunk; localIdx++) {
-        globalCardIndex++;
-        setAiGenerationProgressText(
-          `Chunk ${chunkIdx + 1}/${chunks.length} — card ${globalCardIndex} of ~${TOTAL_CARDS}...`
-        );
-
+      const allCards: Flashcard[] = [];
+      
+      for (let i = 0; i < chunks.length; i++) {
+        setAiGenerationProgressText(`Synthesizing section ${i + 1} of ${chunks.length}...`);
+        const chunk = chunks[i];
+        
         try {
           const res = await fetch('/api/generate-deck', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              textPayload: chunk,          // send only this chunk, not the full text
+              textPayload: chunk,
               fileContent: '',
               fileName: selectedFile?.name || 'Uploaded Notes',
-              cardIndex: localIdx,
-              totalCards: cardsPerChunk,
+              chunkIndex: i + 1,
+              totalChunks: chunks.length,
               customApiKey: deckApiKey
             })
           });
 
           if (!res.ok) {
             const errorText = await res.text();
-            throw new Error(`Server returned status ${res.status}: ${errorText}`);
+            throw new Error(`Server returned status ${res.status}: ${errorText.substring(0, 200)}`);
           }
 
           const data = await res.json();
-
-          if (data.isFallback) {
-            console.warn(`Chunk ${chunkIdx + 1}, card ${localIdx} fallback:`, data.msg);
-            continue;
-          }
-
-          if (data.card) {
-            const newCard: Flashcard = {
-              id: `card-${globalCardIndex}-${Date.now()}`,
-              front: data.card.front,
-              back: data.card.back,
-              hint: data.card.hint || '',
-              options: data.card.options || [],
-              correctOption: data.card.correctOption || ''
-            };
-            allCards.push(newCard);
-            setAiGenResult([...allCards]); // live preview as cards arrive
+          if (data && data.cards && data.cards.length > 0) {
+            const mappedCards = data.cards.map((card: any, cardIdx: number) => ({
+              id: `card-chunk-${i}-${cardIdx}-${Date.now()}`,
+              front: card.front,
+              back: card.back,
+              hint: card.hint || '',
+              options: card.options || [],
+              correctOption: card.correctOption || ''
+            }));
+            allCards.push(...mappedCards);
+          } else {
+            throw new Error(data.msg || "Invalid response format returned by artificial intelligence engine.");
           }
         } catch (err: any) {
-          console.warn(`Error generating card ${globalCardIndex}:`, err);
+          console.warn(`Error generating chunk ${i + 1}:`, err);
+          throw new Error(`Failed on section ${i + 1}: ${err.message || err.toString()}`);
         }
       }
-    }
 
-    if (allCards.length > 0) {
-      setAiGenResult(allCards);
-      setAiDeckTitle(
-        selectedFile
-          ? `AI - ${selectedFile.name.split('.')[0]}`
-          : `AI - Chapter Review ${new Date().toLocaleDateString()}`
-      );
-    } else {
-      alert("Failed to synthesize flashcards. Please double check that your Gemini API Key is valid.");
-    }
-  } catch (err: any) {
-    console.warn("AI deck generation client error:", err);
-    alert(`AI deck generator failed.\n\nDetails: ${err.message || err}\n\nPlease check your internet connection or verify your Gemini API Key.`);
-  } finally {
-    setIsGeneratingDeckAI(false);
-    setAiGenerationProgressText('');
-  }
-};
+      if (allCards.length > 0) {
+        setAiGenResult(allCards);
+        setAiDeckTitle(selectedFile ? `AI - ${selectedFile.name.split('.')[0]}` : `AI - Chapter Review ${new Date().toLocaleDateString()}`);
 
+        if (originalChunkLength > 10) {
+          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nExtracted first 10 core sections (${chunks.length * 6000} chars) to guarantee full learning depth and stability. Generated a master clinical deck of ${allCards.length} index cards!`);
+        } else if (chunks.length > 1) {
+          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nWe successfully processed ${chunks.length} distinct sections sequentially and structured a master deck of ${allCards.length} clinical cards. Happy learning!`);
+        }
+      } else {
+        alert("Failed to synthesize flashcards. Please double check that process.env.GEMINI_API_KEY is configured correctly in Settings > Secrets.");
+      }
+    } catch (err: any) {
+      console.warn("AI deck generation client error:", err);
+      alert(`AI deck generator failed.\n\nDetails: ${err.message || err}\n\nPlease check your internet connection or verify in Settings > Secrets if GEMINI_API_KEY is set.`);
+    } finally {
+      setIsGeneratingDeckAI(false);
+      setAiGenerationProgressText('');
+    }
+  };
 
   const handleCreateNewManualDeck = () => {
     setNewDeckTitle('');
@@ -696,7 +822,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     setNewDeckCategory('Abnormal Psychology');
     setNewDeckCards([{ front: '', back: '', hint: '', options: ['', '', '', ''], correctOption: '' }]);
     setIsCreatingDeck(true);
-    setActiveSubTab('my-decks'); // Always switch to my-decks when creating
   };
 
   const handleAddManualCardRow = () => {
@@ -1110,7 +1235,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     // Simulate AI typing response
     const myKey = profile.email.replace(/\./g, '_');
     const peers = Object.keys(activeSessionRoom.participants).filter(k => k.startsWith('peer_'));
-    const timerIds: ReturnType<typeof setTimeout>[] = [];
 
     peers.forEach((peerKey, i) => {
       const isAlreadySubmitted = activeSessionRoom.participants[peerKey].submittedAnswer;
@@ -1156,10 +1280,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         }
       }, VIRTUAL_PEERS[i].speed);
 
-      timerIds.push(timerIdx);
+      return () => clearTimeout(timerIdx);
     });
 
-    return () => timerIds.forEach(clearTimeout);
   }, [activeSessionRoom?.status, activeSessionRoom?.currentCardIndex, isSoloMode, activeSessionRoom?.id]);
 
   // AI peers self-assessing when reveal is triggered
@@ -1167,7 +1290,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     if (!activeSessionRoom || activeSessionRoom.status !== 'reveal' || !isSoloMode) return;
 
     const peers = Object.keys(activeSessionRoom.participants).filter(k => k.startsWith('peer_'));
-    const timerIds: ReturnType<typeof setTimeout>[] = [];
     peers.forEach((peerKey, i) => {
       const peerRating = activeSessionRoom.participants[peerKey].selfRating;
       if (peerRating) return; // Already rated
@@ -1216,10 +1338,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         }
       }, 3000 + i * 1500);
 
-      timerIds.push(timerIdx);
+      return () => clearTimeout(timerIdx);
     });
 
-    return () => timerIds.forEach(clearTimeout);
   }, [activeSessionRoom?.status, isSoloMode, activeSessionRoom?.id]);
 
   // Solo mode AI virtual peers voice channel activity simulation
@@ -1270,7 +1391,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
       // If I'm the host and timer hits 0, auto-reveal
       if (diff === 0 && activeSessionRoom.hostEmail === profile.email) {
-        hostRevealRef.current?.();
+        handleHostRevealAnswerBack();
       }
     }, 1000);
 
@@ -1282,7 +1403,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     if (!activeSessionRoom || !isSoloMode) return;
 
     const peers = Object.keys(activeSessionRoom.participants).filter(k => k.startsWith('peer_'));
-    const timerIds: ReturnType<typeof setTimeout>[] = [];
     
     peers.forEach((peerKey) => {
       const isDone = activeSessionRoom.participants[peerKey]?.submittedAnswer;
@@ -1317,10 +1437,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         } catch (e) {}
       }, Math.random() * 2000);
 
-      timerIds.push(speakingTimer);
+      return () => clearTimeout(speakingTimer);
     });
 
-    return () => timerIds.forEach(clearTimeout);
   }, [activeSessionRoom?.currentCardIndex, isSoloMode]);
 
   const handleStartGroupSessionActive = async () => {
@@ -1466,8 +1585,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       console.warn("Answer reveal failed:", err);
     }
   };
-  // Keep ref in sync so the timer useEffect never has a stale closure
-  hostRevealRef.current = handleHostRevealAnswerBack;
 
   const handleHostProceedToNextRecallQuiz = async () => {
     if (!activeSessionRoom) return;
@@ -1549,229 +1666,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     }
   };
 
-  // ── WebRTC helpers ─────────────────────────────────────────────────────────
-
-  const STUN_CONFIG: RTCConfiguration = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ],
-  };
-
-  /** Tear down a single peer connection and its Firestore signaling listener */
-  const closePeer = (emailKey: string) => {
-    if (signalingUnsubsRef.current[emailKey]) {
-      signalingUnsubsRef.current[emailKey]();
-      delete signalingUnsubsRef.current[emailKey];
-    }
-    if (peerConnectionsRef.current[emailKey]) {
-      peerConnectionsRef.current[emailKey].close();
-      delete peerConnectionsRef.current[emailKey];
-    }
-    if (remoteAudioElementsRef.current[emailKey]) {
-      remoteAudioElementsRef.current[emailKey].srcObject = null;
-      delete remoteAudioElementsRef.current[emailKey];
-    }
-    offeredPeersRef.current.delete(emailKey);
-  };
-
-  /** Tear down every active peer connection */
-  const closeAllPeers = () => {
-    Object.keys(peerConnectionsRef.current).forEach(closePeer);
-  };
-
-  /**
-   * Create (or return existing) RTCPeerConnection for a remote peer.
-   * localStream must already be set in micStreamRef.current.
-   */
-  const getOrCreatePeerConnection = (
-    remoteEmailKey: string,
-    roomId: string,
-    myEmailKey: string,
-  ): RTCPeerConnection => {
-    if (peerConnectionsRef.current[remoteEmailKey]) {
-      return peerConnectionsRef.current[remoteEmailKey];
-    }
-
-    const pc = new RTCPeerConnection(STUN_CONFIG);
-    peerConnectionsRef.current[remoteEmailKey] = pc;
-
-    // Add local audio tracks
-    if (micStreamRef.current) {
-      micStreamRef.current.getAudioTracks().forEach(track => {
-        pc.addTrack(track, micStreamRef.current!);
-      });
-    }
-
-    // When we get a remote audio track, attach it to an Audio element
-    pc.ontrack = (event) => {
-      const stream = event.streams[0];
-      if (!remoteAudioElementsRef.current[remoteEmailKey]) {
-        const audio = new Audio();
-        audio.autoplay = true;
-        audio.volume = 1.0;
-        remoteAudioElementsRef.current[remoteEmailKey] = audio;
-      }
-      remoteAudioElementsRef.current[remoteEmailKey].srcObject = stream;
-      remoteAudioElementsRef.current[remoteEmailKey].play().catch(() => {});
-    };
-
-    // Trickle ICE: write candidates to Firestore so the remote peer can consume them
-    pc.onicecandidate = async (event) => {
-      if (!event.candidate) return;
-      try {
-        const candRef = doc(
-          collection(db, 'liveRecallSessions', roomId, 'signaling',
-            `${myEmailKey}__to__${remoteEmailKey}`, 'candidates')
-        );
-        await setDoc(candRef, { candidate: event.candidate.toJSON(), ts: Date.now() });
-      } catch (e) {
-        console.warn('ICE candidate write failed:', e);
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
-        closePeer(remoteEmailKey);
-      }
-    };
-
-    return pc;
-  };
-
-  /**
-   * Listen for an offer/answer/ICE from a specific remote peer toward us.
-   * path: signaling/{remoteEmailKey}__to__{myEmailKey}
-   */
-  const listenForSignalingFromPeer = (
-    remoteEmailKey: string,
-    roomId: string,
-    myEmailKey: string,
-  ) => {
-    if (signalingUnsubsRef.current[remoteEmailKey]) return; // already listening
-
-    const sigDocPath = `liveRecallSessions/${roomId}/signaling/${remoteEmailKey}__to__${myEmailKey}`;
-    const sigDocRef = doc(db, sigDocPath);
-
-    const unsub = onSnapshot(sigDocRef, async (snap) => {
-      if (!snap.exists()) return;
-      const data = snap.data();
-
-      const pc = getOrCreatePeerConnection(remoteEmailKey, roomId, myEmailKey);
-
-      // Handle offer
-      if (data.offer && pc.signalingState === 'stable' && !offeredPeersRef.current.has(`answer_sent_to_${remoteEmailKey}`)) {
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          offeredPeersRef.current.add(`answer_sent_to_${remoteEmailKey}`);
-
-          // Write our answer to the reverse path
-          await setDoc(
-            doc(db, `liveRecallSessions/${roomId}/signaling/${myEmailKey}__to__${remoteEmailKey}`),
-            { answer: answer.toJSON(), ts: Date.now() },
-            { merge: true }
-          );
-        } catch (e) {
-          console.warn('Answer creation failed:', e);
-        }
-      }
-
-      // Handle answer to our offer
-      if (data.answer && pc.signalingState === 'have-local-offer') {
-        try {
-          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        } catch (e) {
-          console.warn('setRemoteDescription(answer) failed:', e);
-        }
-      }
-    });
-
-    signalingUnsubsRef.current[remoteEmailKey] = unsub;
-
-    // Also listen for incoming ICE candidates from this peer
-    const candColRef = collection(db, `liveRecallSessions/${roomId}/signaling/${remoteEmailKey}__to__${myEmailKey}/candidates`);
-    const candUnsub = onSnapshot(candColRef, async (colSnap) => {
-      const pc = peerConnectionsRef.current[remoteEmailKey];
-      if (!pc) return;
-      for (const change of colSnap.docChanges()) {
-        if (change.type === 'added') {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(change.doc.data().candidate));
-          } catch (e) {
-            console.warn('addIceCandidate failed:', e);
-          }
-        }
-      }
-    });
-
-    // Combine both unsubscribers
-    const prevUnsub = signalingUnsubsRef.current[remoteEmailKey];
-    signalingUnsubsRef.current[remoteEmailKey] = () => {
-      prevUnsub?.();
-      candUnsub();
-    };
-  };
-
-  /**
-   * Initiate an offer to a remote peer (caller side).
-   * Only called when myEmailKey < remoteEmailKey (lexicographic) to avoid double-offers.
-   */
-  const initiateOfferToPeer = async (
-    remoteEmailKey: string,
-    roomId: string,
-    myEmailKey: string,
-  ) => {
-    if (offeredPeersRef.current.has(remoteEmailKey)) return;
-    offeredPeersRef.current.add(remoteEmailKey);
-
-    const pc = getOrCreatePeerConnection(remoteEmailKey, roomId, myEmailKey);
-
-    try {
-      const offer = await pc.createOffer({ offerToReceiveAudio: true });
-      await pc.setLocalDescription(offer);
-
-      await setDoc(
-        doc(db, `liveRecallSessions/${roomId}/signaling/${myEmailKey}__to__${remoteEmailKey}`),
-        { offer: offer.toJSON(), ts: Date.now() },
-        { merge: true }
-      );
-
-      // Listen for the answer on the reverse path
-      listenForSignalingFromPeer(remoteEmailKey, roomId, myEmailKey);
-    } catch (e) {
-      console.warn('Offer creation failed:', e);
-      offeredPeersRef.current.delete(remoteEmailKey);
-    }
-  };
-
-  /**
-   * Connect to all other voice-lounge participants in the room.
-   * Uses a deterministic offer/answer split: lower emailKey sends the offer.
-   */
-  const connectToAllVoicePeers = (room: GroupRecallRoom, myEmailKey: string) => {
-    const otherKeys = Object.keys(room.participants).filter(
-      k => k !== myEmailKey && room.participants[k].voiceConnected && !k.startsWith('peer_')
-    );
-
-    otherKeys.forEach(remoteKey => {
-      if (myEmailKey < remoteKey) {
-        // I am the "caller" – send offer
-        initiateOfferToPeer(remoteKey, room.id, myEmailKey);
-      } else {
-        // I am the "callee" – just listen for an offer
-        listenForSignalingFromPeer(remoteKey, room.id, myEmailKey);
-      }
-    });
-  };
-
-  // ── End WebRTC helpers ─────────────────────────────────────────────────────
-
   const cleanupVoiceLoungeAndRecording = () => {
-    // Tear down all WebRTC peer connections first
-    closeAllPeers();
-
     // Stop recording if active
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try { mediaRecorderRef.current.stop(); } catch (e) {}
@@ -1781,7 +1676,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       voiceTimerRef.current = null;
     }
     setIsRecordingVoice(false);
-    isRecordingVoiceRef.current = false;
     setRecordingSeconds(0);
 
     // Release mic stream tracks
@@ -1810,9 +1704,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
     analyserRef.current = null;
     setVoiceLoungeConnected(false);
-    voiceLoungeConnectedRef.current = false;
     setIsVoiceMuted(false);
-    isVoiceMutedRef.current = false;
     setLocalVoiceVolume(0);
   };
 
@@ -1845,16 +1737,13 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   };
 
   const handleConnectVoiceLounge = async () => {
-    if (!activeSessionRoom) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
       setVoiceLoungeConnected(true);
-      voiceLoungeConnectedRef.current = true;
       setIsVoiceMuted(false);
-      isVoiceMutedRef.current = false;
 
-      // Set up analyser for volume visualisation (unchanged)
+      // Set up analyzer for voice visualizations
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioContextClass) {
         const ctx = new AudioContextClass();
@@ -1867,6 +1756,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
+
         let lastSpeakingVal = false;
         let lastSyncTime = 0;
 
@@ -1874,69 +1764,74 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
           if (!analyserRef.current || !micStreamRef.current) return;
           analyserRef.current.getByteFrequencyData(dataArray);
           let total = 0;
-          for (let i = 0; i < bufferLength; i++) total += dataArray[i];
+          for (let i = 0; i < bufferLength; i++) {
+            total += dataArray[i];
+          }
           const average = total / bufferLength;
-          const volumeScaled = Math.min(100, Math.round((average / 255) * 200));
+          const volumeScaled = Math.min(100, Math.round((average / 255) * 200)); 
           setLocalVoiceVolume(volumeScaled);
 
-          const isSpeaking = volumeScaled > 8;
+          // Throttled Firestore speaking state sync
+          const isSpeaking = volumeScaled > 15;
+          
+          // VOX Auto-recording logic for Hands-free Voice Lounge
+          if (voiceLoungeConnected && !isVoiceMuted && !isRecordingVoice && isSpeaking && !isAutoRecordingRef.current) {
+            isAutoRecordingRef.current = true;
+            handleStartVoiceRecording();
+          } else if (isAutoRecordingRef.current && !isSpeaking) {
+            // Clear old VOX timeout if speaking resumes
+            if (voxTimerRef.current) clearTimeout(voxTimerRef.current);
+            // If quiet for 1.5s, stop and send
+            voxTimerRef.current = setTimeout(() => {
+              if (isAutoRecordingRef.current) {
+                isAutoRecordingRef.current = false;
+                handleStopVoiceRecording();
+              }
+            }, 1500);
+          } else if (isAutoRecordingRef.current && isSpeaking) {
+            // Reset quiet timer if speaking continues
+            if (voxTimerRef.current) {
+              clearTimeout(voxTimerRef.current);
+              voxTimerRef.current = null;
+            }
+          }
+
           const now = Date.now();
           if (isSpeaking !== lastSpeakingVal && now - lastSyncTime > 400) {
             lastSpeakingVal = isSpeaking;
             lastSyncTime = now;
-            syncVoiceStatusToFirestore(true, isVoiceMutedRef.current, isSpeaking);
+            syncVoiceStatusToFirestore(true, isVoiceMuted, isSpeaking);
           }
+
           rafIdRef.current = requestAnimationFrame(updateVolume);
         };
+
         rafIdRef.current = requestAnimationFrame(updateVolume);
       }
 
-      // Mark ourselves as voice-connected in Firestore
       await syncVoiceStatusToFirestore(true, false, false);
-
-      // ── WebRTC: connect to every peer already in the lounge ───────────────
-      const myEmailKey = profile.email.replace(/\./g, '_');
-      connectToAllVoicePeers(activeSessionRoom, myEmailKey);
-      // ──────────────────────────────────────────────────────────────────────
-
+      
+      // Post system chat message
       const myName = profile.username || profile.email.split('@')[0];
-      await updateDoc(doc(db, 'liveRecallSessions', activeSessionRoom.id), {
+      await updateDoc(doc(db, 'liveRecallSessions', activeSessionRoom!.id), {
         chatMessages: arrayUnion({
           id: `msg-${Date.now()}`,
           senderName: "Lobby Bot",
           senderEmail: "admin@boardpassph.com",
-          text: `🎙️ ${myName} joined the live voice lounge!`,
+          text: `🎙️ ${myName} joined the active voice lounge!`,
           timestamp: new Date().toLocaleTimeString()
         })
       });
     } catch (err) {
       console.error("Microphone activation failed:", err);
-      alert("🎙️ Microphone Access Required: Please allow microphone permissions to connect to the BP Voice Lounge.");
+      alert("🎙️ Microphone Access Required: Please allow microphone permissions to connect to the BP AirTime Voice Lounge.");
     }
   };
 
   const handleDisconnectVoiceLounge = async () => {
     if (!activeSessionRoom) return;
     const myName = profile.username || profile.email.split('@')[0];
-    const myEmailKey = profile.email.replace(/\./g, '_');
-
-    // ── Close all WebRTC peer connections ─────────────────────────────────
-    closeAllPeers();
-
-    // Delete our outgoing signaling docs from Firestore so peers know we left
-    try {
-      const sigColRef = collection(db, 'liveRecallSessions', activeSessionRoom.id, 'signaling');
-      const sigSnap = await getDocs(sigColRef);
-      const batch = writeBatch(db);
-      sigSnap.docs.forEach(d => {
-        if (d.id.startsWith(`${myEmailKey}__to__`)) batch.delete(d.ref);
-      });
-      await batch.commit();
-    } catch (e) {
-      console.warn('Signaling cleanup failed:', e);
-    }
-    // ──────────────────────────────────────────────────────────────────────
-
+    
     // Cleanup local state and stream
     if (micStreamRef.current) {
       micStreamRef.current.getTracks().forEach(track => track.stop());
@@ -1952,12 +1847,10 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     }
     analyserRef.current = null;
     setVoiceLoungeConnected(false);
-    voiceLoungeConnectedRef.current = false;
     setIsVoiceMuted(false);
-    isVoiceMutedRef.current = false;
     setLocalVoiceVolume(0);
 
-    // Update Firestore presence
+    // Update Firestore
     await syncVoiceStatusToFirestore(false, false, false);
 
     try {
@@ -1976,7 +1869,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const handleToggleMuteVoiceLounge = async () => {
     const nextMuted = !isVoiceMuted;
     setIsVoiceMuted(nextMuted);
-    isVoiceMutedRef.current = nextMuted;
 
     if (micStreamRef.current) {
       micStreamRef.current.getAudioTracks().forEach(track => {
@@ -2044,7 +1936,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       };
 
       setIsRecordingVoice(true);
-      isRecordingVoiceRef.current = true;
       setRecordingSeconds(0);
       recordingSecondsRef.current = 0;
       recorder.start();
@@ -2064,6 +1955,8 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     }
   };
 
+  const recordingSecondsRef = useRef(0);
+
   const handleStopVoiceRecording = () => {
     isAutoRecordingRef.current = false;
     if (voxTimerRef.current) {
@@ -2079,7 +1972,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       mediaRecorderRef.current.stop();
     }
     setIsRecordingVoice(false);
-    isRecordingVoiceRef.current = false;
   };
 
   const handleLeaveRecallGame = () => {
@@ -2102,40 +1994,21 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   }, []);
 
   // Auto-play incoming voice notes if in voice lounge
-  // Uses a pending queue to retry playback on next user interaction if browser blocks auto-play
-  const pendingAudioQueue = useRef<HTMLAudioElement[]>([]);
-
-  const flushPendingAudio = () => {
-    while (pendingAudioQueue.current.length > 0) {
-      const a = pendingAudioQueue.current.shift();
-      if (a) a.play().catch(() => {});
-    }
-  };
-
-  useEffect(() => {
-    // Flush any queued audio on any user gesture (click/keydown)
-    document.addEventListener('click', flushPendingAudio, { once: false });
-    document.addEventListener('keydown', flushPendingAudio, { once: false });
-    return () => {
-      document.removeEventListener('click', flushPendingAudio);
-      document.removeEventListener('keydown', flushPendingAudio);
-    };
-  }, []);
-
   useEffect(() => {
     if (!voiceLoungeConnected || !activeSessionRoom) return;
 
     activeSessionRoom.chatMessages.forEach(msg => {
       if (msg.audioUrl && msg.senderEmail !== profile.email && !playedVoiceNoteIds.current.has(msg.id)) {
         playedVoiceNoteIds.current.add(msg.id);
-
+        
+        // Auto-play the audio
         try {
           const audio = new Audio(msg.audioUrl);
           audio.volume = 1.0;
-
-          // Try auto-play; if browser blocks it, queue for next user interaction
-          audio.play().catch(() => {
-            pendingAudioQueue.current.push(audio);
+          
+          // Browser policy check: only play if user has interacted which they have if connected to lounge
+          audio.play().catch(err => {
+            console.warn("Auto-play blocked by browser. User needs to interact with page first.", err);
           });
         } catch (e) {
           console.error("Audio auto-play failed:", e);
@@ -2143,34 +2016,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       }
     });
   }, [activeSessionRoom?.chatMessages, voiceLoungeConnected]);
-
-  // ── WebRTC: when a new peer joins the lounge while we are already connected,
-  //    initiate / accept a connection to them automatically ───────────────────
-  useEffect(() => {
-    if (!voiceLoungeConnected || !activeSessionRoom || !micStreamRef.current) return;
-    const myEmailKey = profile.email.replace(/\./g, '_');
-    const voicePeerKeys = Object.keys(activeSessionRoom.participants).filter(
-      k => k !== myEmailKey && activeSessionRoom.participants[k].voiceConnected && !k.startsWith('peer_')
-    );
-    voicePeerKeys.forEach(remoteKey => {
-      if (!peerConnectionsRef.current[remoteKey]) {
-        // New peer appeared — connect
-        if (myEmailKey < remoteKey) {
-          initiateOfferToPeer(remoteKey, activeSessionRoom.id, myEmailKey);
-        } else {
-          listenForSignalingFromPeer(remoteKey, activeSessionRoom.id, myEmailKey);
-        }
-      }
-    });
-    // Tear down connections for peers who left the lounge
-    Object.keys(peerConnectionsRef.current).forEach(remoteKey => {
-      if (!activeSessionRoom.participants[remoteKey]?.voiceConnected) {
-        closePeer(remoteKey);
-      }
-    });
-  }, [activeSessionRoom?.participants, voiceLoungeConnected]);
-  // ──────────────────────────────────────────────────────────────────────────
-
   const filteredPublicDecks = publicDecks.filter(deck => 
     deck.title.toLowerCase().includes(deckSearchQuery.toLowerCase()) || 
     deck.description.toLowerCase().includes(deckSearchQuery.toLowerCase()) ||
@@ -2819,14 +2664,14 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                   <div className="flex-grow bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-rose-700 flex items-center justify-between animate-pulse">
                     <span className="flex items-center gap-1.5 select-none text-[10px] uppercase font-bold tracking-wide">
                       <span className="h-2.5 w-2.5 rounded-full bg-rose-600 animate-ping shrink-0" />
-                      {"REC VOICE NOTE"}: {recordingSeconds}s
+                      {isAutoRecordingRef.current ? "BP AirTime: Live Broadcasting" : "REC VOICE NOTE"}: {recordingSeconds}s
                     </span>
                     <button
                       type="button"
                       onClick={handleStopVoiceRecording}
                       className="text-[9px] uppercase font-black text-rose-900 bg-rose-100 hover:bg-rose-200 border border-rose-300 px-2 py-1 rounded-lg cursor-pointer"
                     >
-                      {"Stop & Send"}
+                      {isAutoRecordingRef.current ? "Stop Mic" : "Stop & Send"}
                     </button>
                   </div>
                 ) : (
@@ -3225,22 +3070,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                         </button>
                       </div>
                     )}
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">
-  Cards per Document Chunk (total scales with file size)
-</label>
-<input
-  type="number"
-  min={1}
-  max={200}
-  step={1}
-  value={numCardsToGenerate}
-  onChange={(e) => setNumCardsToGenerate(Math.max(1, Math.min(200, parseInt(e.target.value) || 1)))}
-                      disabled={isGeneratingDeckAI || isParsingFile}
-                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono font-bold outline-none focus:border-pine focus:ring-1 focus:ring-pine/20 transition disabled:opacity-50"
-                    />
                   </div>
 
                   <button
