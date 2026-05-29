@@ -39,7 +39,7 @@ import { LifeStagesPanel } from './components/LifeStagesPanel';
 
 import { getRandomLocalQuestion } from './utils/questionGenerator';
 import { SEED_QUESTIONS } from './data/seedQuestions';
-import { db, firestoreWithTimeout } from './firebase';
+import { db, firestoreWithTimeout, initializeFirebase } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const THEME_OPTIONS = [
@@ -172,7 +172,7 @@ export default function App() {
 
   // Load profile upon startup on this client
   useEffect(() => {
-    import('./firebase').then(m => m.initializeFirebase());
+    initializeFirebase();
     const initializeProfile = async () => {
       try {
         const lastEmail = localStorage.getItem('bp_last_logged_email');

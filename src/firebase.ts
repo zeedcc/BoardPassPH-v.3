@@ -10,12 +10,28 @@ import {
 } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer, Firestore } from 'firebase/firestore';
 
-import firebaseConfig from '../firebase-applet-config.json';
+import firebaseConfigJson from '../firebase-applet-config.json';
 
+interface ExtendedFirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  databaseURL: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+  measurementId?: string;
+  firestoreDatabaseId?: string;
+}
+
+const firebaseConfig = firebaseConfigJson as ExtendedFirebaseConfig;
 const app = initializeApp(firebaseConfig);
 
-const customDb = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+const isCustomFirestoreConfigured = Boolean(firebaseConfig.firestoreDatabaseId?.trim());
 const defaultDb = getFirestore(app);
+const customDb = isCustomFirestoreConfigured
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : defaultDb;
 
 let activeDb = customDb;
 
@@ -104,7 +120,9 @@ async function testConnection() {
       console.log("Dynamically fall back to '(default)' database container.");
     } else {
       activeDb = customDb;
-      console.log(`Successfully connected to custom database: ${firebaseConfig.firestoreDatabaseId}`);
+      if (isCustomFirestoreConfigured) {
+        console.log(`Successfully connected to custom database: ${firebaseConfig.firestoreDatabaseId}`);
+      }
     }
 
     if (typeof window !== 'undefined' && window.sessionStorage) {
