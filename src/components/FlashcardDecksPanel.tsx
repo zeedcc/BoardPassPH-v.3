@@ -333,9 +333,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       return;
     }
 
-    const tenMbLimit = 10 * 1024 * 1024;
-    if (file.size > tenMbLimit) {
-      alert(`⚠️ File is too large! The limit is 10MB. This file is ${(file.size / (1024 * 1024)).toFixed(2)}MB. Please choose a smaller study guide or split your material.`);
+    const limitSize = 20 * 1024 * 1024;
+    if (file.size > limitSize) {
+      alert(`⚠️ File is too large! The limit is 20MB. This file is ${(file.size / (1024 * 1024)).toFixed(2)}MB. Please choose a smaller study guide or split your material.`);
       return;
     }
 
@@ -1559,7 +1559,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                     <span className="text-[10px] font-mono uppercase bg-gray-50 text-gray-400 px-3 py-1 rounded-full border border-gray-150">
                       Active Recall Prompt
                     </span>
-                    <h2 className="font-display text-2xl font-black text-pine max-w-2xl mx-auto leading-relaxed">
+                    <h2 className="font-display text-2xl font-black text-pine max-w-2xl mx-auto leading-relaxed whitespace-pre-wrap text-left">
                       {activeSessionRoom.cards[activeSessionRoom.currentCardIndex].front}
                     </h2>
 
@@ -1625,7 +1625,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                       <span className="text-[10px] font-mono uppercase bg-red-50 text-red-700 px-3 py-1 rounded-full border border-red-150">
                         Prompt Question
                       </span>
-                      <h4 className="text-sm font-bold text-gray-500 max-w-xl mx-auto">
+                      <h4 className="text-sm font-bold text-gray-500 max-w-xl mx-auto whitespace-pre-wrap text-left">
                         {activeSessionRoom.cards[activeSessionRoom.currentCardIndex].front}
                       </h4>
                     </div>
@@ -2148,16 +2148,15 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <label className="text-[9px] uppercase font-black text-gray-400">Card Front (Active Prompt)</label>
-                          <input
-                            type="text"
+                          <textarea
                             value={card.front}
                             onChange={(e) => {
                               const updated = [...newDeckCards];
                               updated[idx].front = e.target.value;
                               setNewDeckCards(updated);
                             }}
-                            placeholder="e.g. What is the diagnosis rule of Schizoid disorder?"
-                            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium outline-none"
+                            placeholder="e.g. What is the diagnosis rule of Schizoid disorder?&#10;A) ...&#10;B) ... "
+                            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium outline-none resize-y min-h-[60px]"
                           />
                         </div>
                         <div className="space-y-1">
@@ -2327,7 +2326,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                 <div className="space-y-4 border-l border-gray-100 pl-0 lg:pl-6">
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">
-                      Alternative: Upload Reference File (Up to 10MB)
+                      Alternative: Upload Reference File (Up to 20MB)
                     </label>
                     
                     <div className="border-2 border-dashed border-gray-200 hover:border-pine/35 hover:bg-foam/10 rounded-3xl p-8 text-center cursor-pointer transition relative">
@@ -2340,7 +2339,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                       />
                       <Upload className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                       <p className="text-xs font-bold text-gray-650">Drag & Drop or click to upload</p>
-                      <p className="text-[10px] text-gray-400 mt-1">Supports PDF, Word (.docx), Excel (.xlsx), CSV, or TXT (Max 10MB)</p>
+                      <p className="text-[10px] text-gray-400 mt-1">Supports PDF, Word (.docx), Excel (.xlsx), CSV, or TXT (Max 20MB)</p>
                     </div>
 
                     {/* API Key Configuration for AI Generaton */}
@@ -2461,7 +2460,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                     {aiGenResult.map((card, idx) => (
                       <div key={card.id || idx} className="bg-[#fcfdfc] border border-gray-150 p-4 rounded-2xl shadow-xs">
                         <span className="text-[9px] font-mono uppercase bg-gray-100 text-gray-400 px-2 py-0.5 rounded-md">Card #{idx + 1}</span>
-                        <p className="text-xs text-gray-800 font-bold leading-relaxed mt-2"><strong>Front:</strong> {card.front}</p>
+                        <p className="text-xs text-gray-800 font-bold leading-relaxed mt-2 whitespace-pre-wrap"><strong>Front:</strong><br />{card.front}</p>
                         <p className="text-xs text-emerald-800 leading-relaxed mt-2.5 border-t border-gray-50 pt-2.5"><strong>Back answers:</strong> {card.back}</p>
                         {card.hint && (
                           <p className="text-[10px] text-gray-400 italic mt-1.5">Hint: {card.hint}</p>
