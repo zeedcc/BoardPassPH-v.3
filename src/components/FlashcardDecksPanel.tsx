@@ -592,41 +592,57 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     setAiGenResult([]);
 
     try {
-      const fullText = `${rawNotes}\n${rawFileText}`.trim();
-      
-      // Split into safe chunks of exactly 6,000 characters to bypass serverless timeouts (10 seconds)
-      // 6k characters works perfectly within 3-5 seconds on serverless
-      let chunks = splitTextIntoSemanticChunks(fullText, 6000);
-      const originalChunkLength = chunks.length;
-      
-      // Cap at 10 chunks to prevent socket overflow/rate limiting on massive files or textbooks
-      if (chunks.length > 10) {
-        chunks = chunks.slice(0, 10);
+  const fullText = `${rawNotes}\n${rawFileText}`.trim();
+
+  const TOTAL_CARDS = 10;
+  const allCards: Flashcard[] = [];
+
+  for (let i = 1; i <= TOTAL_CARDS; i++) {
+    setAiGenerationProgressText(`Generating card ${i} of ${TOTAL_CARDS}...`);
+
+    try {
+      const res = await fetch('/api/generate-deck', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          textPayload: fullText,
+          fileContent: '',
+          fileName: selectedFile?.name || 'Uploaded Notes',
+          cardIndex: i,
+          totalCards: TOTAL_CARDS,
+          customApiKey: deckApiKey
+        })
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Server returned status ${res.status}: ${errorText}`);
       }
 
-      const allCards: Flashcard[] = [];
-      
-      for (let i = 0; i < chunks.length; i++) {
-  const chunk = chunks[i];
+      const data = await res.json();
 
-  try {
-    const res = await fetch('/api/generate-deck', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        textPayload: chunk,
-        fileContent: '',
-        fileName: selectedFile?.name || 'Uploaded Notes',
-        chunkIndex: i + 1,
-        totalChunks: chunks.length,
-        customApiKey: deckApiKey
-      })
-    });
+      if (data.isFallback) {
+        throw new Error(data.msg || 'AI generation failed');
+      }
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Server returned status ${res.status}: ${errorText}`);
+      if (data.card) {
+        allCards.push({
+          id: `card-${i}-${Date.now()}`,
+          front: data.card.front,
+          back: data.card.back,
+          hint: data.card.hint || '',
+          options: data.card.options || [],
+          correctOption: data.card.correctOption || ''
+        });
+        // Show cards as they arrive
+        setAiGenResult([...allCards]);
+      }
+
+    } catch (err: any) {
+      console.warn(`Error generating card ${i}:`, err);
+      // Skip failed card and continue
     }
+  }
 
     // Read SSE stream
     const reader = res.body!.getReader();
