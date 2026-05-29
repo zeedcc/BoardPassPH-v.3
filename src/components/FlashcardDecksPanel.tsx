@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Layers, Plus, Search, Share2, Play, Send, Upload, Sparkles, 
-  Smile, Check, X, ChevronRight, Info, Users, Globe, Lock, 
+  Smile, Check, X, ChevronLeft, ChevronRight, Info, Users, Globe, Lock, 
   ArrowLeft, Copy, Trophy, RefreshCw, ThumbsUp, MessageSquare, BookOpen, AlertCircle,
-  Mic, MicOff, Volume2, CircleDot, Radio, Square
+  Mic, MicOff, Volume2, CircleDot, Radio, Square, Zap, Key
 } from 'lucide-react';
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -1012,6 +1012,22 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     }
   };
 
+  const handleUpdateCurrentCardIndex = async (newIdx: number) => {
+    if (!activeSessionRoom) return;
+    if (newIdx < 0 || newIdx >= activeSessionRoom.cards.length) return;
+
+    try {
+      const docRef = doc(db, 'liveRecallSessions', activeSessionRoom.id);
+      await updateDoc(docRef, { 
+        currentCardIndex: newIdx,
+        status: 'active' // Ensure it resets to active if it was reveal
+      });
+      setMyWrittenAnswer('');
+    } catch (err) {
+      console.warn("Index update failure:", err);
+    }
+  };
+
   const handleHostRevealAnswerBack = async () => {
     if (!activeSessionRoom) return;
 
@@ -1611,7 +1627,14 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                             Hint
                           </button>
                           <button 
-                            onClick={() => handleSubmitMyWrittenRecallAnswer(activeSessionRoom.cards[activeSessionRoom.currentCardIndex].correctOption)}
+                            onClick={() => {
+                              const memberKey = profile.email.replace(/\./g, '_');
+                              if (!activeSessionRoom.participants[memberKey]?.submittedAnswer) {
+                                setProfile(prev => prev ? ({ ...prev, totalXp: Math.max(0, prev.totalXp - 5) }) : prev);
+                                alert("Penalty: -5 XP for revealing without an attempt!");
+                              }
+                              handleSubmitMyWrittenRecallAnswer(activeSessionRoom.cards[activeSessionRoom.currentCardIndex].correctOption);
+                            }}
                             className="flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-200 rounded-full text-xs font-black text-gray-600 shadow-sm cursor-pointer hover:bg-gray-50 transition"
                           >
                             <BookOpen className="w-4 h-4 text-rose-500" />

@@ -236,7 +236,7 @@ Format details:
 - Each card's 'back' must clearly state a concise, precise clinical explanation of why the correct option is right and the others are wrong.
 - Each 'hint' is a small cognitive mnemonic or cue to stimulate retrieval.
 
-Generate a highly optimized, high-yield deck of exactly 4 to 5 MCQ flashcards covering the key concepts and case vignettes from the material. Keep descriptions punchy and direct to prioritize fast learning and prevent API execution timeouts.
+Generate a highly optimized, high-yield deck of exactly 10 MCQ flashcards covering the key concepts and case vignettes from the material. Keep descriptions punchy and direct to prioritize fast learning and prevent API execution timeouts.
 Return your response strictly in JSON matching the requested responseSchema.`;
 
     const response = await generateContentWithFallback(ai, {
