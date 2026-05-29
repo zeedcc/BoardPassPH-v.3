@@ -17,16 +17,7 @@ const app = initializeApp(firebaseConfig);
 const customDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 const defaultDb = getFirestore(app);
 
-let activeDb: Firestore = customDb;
-
-export const db = new Proxy({} as any, {
-  get(target, prop, receiver) {
-    return Reflect.get(activeDb, prop, receiver);
-  },
-  set(target, prop, value, receiver) {
-    return Reflect.set(activeDb, prop, value, receiver);
-  }
-}) as Firestore;
+export let db: Firestore = customDb;
 
 export const auth = getAuth();
 
@@ -66,9 +57,9 @@ async function testConnection() {
   if (typeof window !== 'undefined' && window.sessionStorage?.getItem('bp_firestore_connected')) {
     const savedId = window.sessionStorage.getItem('bp_firestore_connected_id');
     if (savedId === 'default') {
-      activeDb = defaultDb;
+      db = defaultDb;
     } else if (savedId === 'custom') {
-      activeDb = customDb;
+      db = customDb;
     }
     return;
   }
@@ -97,7 +88,7 @@ async function testConnection() {
   const testCustom = testDb(customDb, 'custom')
     .then(() => {
       console.log(`Successfully reached custom database: ${firebaseConfig.firestoreDatabaseId}`);
-      activeDb = customDb;
+      db = customDb;
       if (typeof window !== 'undefined' && window.sessionStorage) {
         window.sessionStorage.setItem('bp_firestore_connected', 'true');
         window.sessionStorage.setItem('bp_firestore_connected_id', 'custom');
@@ -108,7 +99,7 @@ async function testConnection() {
   const testDefault = testDb(defaultDb, 'default')
     .then(() => {
       console.log("Successfully reached default '(default)' database.");
-      activeDb = defaultDb;
+      db = defaultDb;
       if (typeof window !== 'undefined' && window.sessionStorage) {
         window.sessionStorage.setItem('bp_firestore_connected', 'true');
         window.sessionStorage.setItem('bp_firestore_connected_id', 'default');
@@ -135,7 +126,7 @@ async function testConnection() {
         firebaseStatus.errorMessage = msg;
         console.error("All Firestore database connection attempts failed:", finalError);
         // Default back to custom as final fallback
-        activeDb = customDb;
+        db = customDb;
       }
     }
   }

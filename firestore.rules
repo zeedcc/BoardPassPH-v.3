@@ -89,11 +89,8 @@ service cloud.firestore {
 
     match /liveRecallSessions/{sessionId} {
       allow read, write: if true;
-      match /signaling/{signalId} {
+      match /signaling/{document=**} {
         allow read, write: if true;
-        match /candidates/{candidateId} {
-          allow read, write: if true;
-        }
       }
     }
   }
