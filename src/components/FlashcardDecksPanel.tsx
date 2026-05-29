@@ -7,7 +7,7 @@ import {
   Mic, MicOff, Volume2, CircleDot, Radio, Square, Zap, Key, Flame, Heart, ChevronDown
 } from 'lucide-react';
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, firestoreWithTimeout, firebaseStatus } from '../firebase';
 import { UserProfile, Flashcard, FlashcardDeck, GroupRecallRoom } from '../types';
 
 interface FlashcardDecksPanelProps {
@@ -263,7 +263,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
         try {
           const docRef = doc(db, 'liveRecallSessions', code);
-          const docSnap = await getDoc(docRef);
+          const docSnap = await firestoreWithTimeout(getDoc(docRef), 4000);
 
           if (!docSnap.exists()) {
             alert("The shared Recall lobby was not found. It may have expired or been deleted.");
@@ -285,7 +285,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
             selfRating: null
           };
 
-          await updateDoc(docRef, {
+          await firestoreWithTimeout(updateDoc(docRef, {
             participants: updatedParticipants,
             chatMessages: arrayUnion({
               id: `msg-${Date.now()}`,
@@ -294,7 +294,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
               text: `${myName} entered the Active Recall room via share link!`,
               timestamp: new Date().toLocaleTimeString()
             })
-          });
+          }), 4000);
 
           subscribeToLiveRecallSession(code);
         } catch (err) {
@@ -968,7 +968,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     };
 
     try {
-      await setDoc(doc(db, 'liveRecallSessions', roomId), newRoom);
+      await firestoreWithTimeout(setDoc(doc(db, 'liveRecallSessions', roomId), newRoom), 4000);
       
       // Subscribe real-time
       subscribeToLiveRecallSession(roomId);
@@ -1013,7 +1013,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
     try {
       const docRef = doc(db, 'liveRecallSessions', code);
-      const docSnap = await getDoc(docRef);
+      const docSnap = await firestoreWithTimeout(getDoc(docRef), 4000);
 
       if (!docSnap.exists()) {
         alert("Active Recall lobby not found. Double check your code (e.g. room-123456).");
@@ -1036,7 +1036,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         selfRating: null
       };
 
-      await updateDoc(docRef, {
+      await firestoreWithTimeout(updateDoc(docRef, {
         participants: updatedParticipants,
         chatMessages: arrayUnion({
           id: `msg-${Date.now()}`,
@@ -1045,7 +1045,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
           text: `${myName} stepped into the Active Recall room!`,
           timestamp: new Date().toLocaleTimeString()
         })
-      });
+      }), 4000);
 
       subscribeToLiveRecallSession(code);
     } catch (err) {
@@ -3464,6 +3464,11 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                     >
                       {sessionRoomLoading ? 'Connecting to Firebase...' : 'Step into the Arena'}
                     </button>
+                    {firebaseStatus.errorMessage && (
+                      <p className="text-[10px] text-red-500 mt-2 font-mono break-words leading-tight bg-red-50 p-2 rounded-xl border border-red-100">
+                        ⚠️ Connection alert: {firebaseStatus.errorMessage}
+                      </p>
+                    )}
                   </div>
                 </div>
 

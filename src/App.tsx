@@ -39,7 +39,7 @@ import { LifeStagesPanel } from './components/LifeStagesPanel';
 
 import { getRandomLocalQuestion } from './utils/questionGenerator';
 import { SEED_QUESTIONS } from './data/seedQuestions';
-import { db } from './firebase';
+import { db, firestoreWithTimeout } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const THEME_OPTIONS = [
@@ -201,7 +201,7 @@ export default function App() {
           // Then, fetch live copy from Firestore
           try {
             const docRef = doc(db, 'profiles', emailKey);
-            const docSnap = await getDoc(docRef);
+            const docSnap = await firestoreWithTimeout(getDoc(docRef), 3500);
             if (docSnap.exists()) {
               const fbProfile = docSnap.data() as UserProfile;
               setProfile(fbProfile);
@@ -210,7 +210,7 @@ export default function App() {
                 localStorage.setItem(`bp_notes_${emailKey}`, JSON.stringify(fbProfile.notes));
               }
             } else if (loadedProfile) {
-              await setDoc(docRef, loadedProfile);
+              await firestoreWithTimeout(setDoc(docRef, loadedProfile), 3500);
             }
           } catch (fbErr) {
             console.warn("Could not sync live profile from Firestore on mount:", fbErr);
@@ -246,7 +246,7 @@ export default function App() {
         // Schedule a consolidated sync in 6 seconds
         syncTimeoutRef.current = setTimeout(() => {
           const syncEmail = next.email.trim().toLowerCase();
-          setDoc(doc(db, 'profiles', syncEmail), next)
+          firestoreWithTimeout(setDoc(doc(db, 'profiles', syncEmail), next), 4000)
             .then(() => {
               setSyncStatus('synced');
             })
@@ -272,7 +272,7 @@ export default function App() {
         throw new Error("Profile email is missing.");
       }
       const docRef = doc(db, 'profiles', syncEmail);
-      await setDoc(docRef, profile);
+      await firestoreWithTimeout(setDoc(docRef, profile), 4500);
       await new Promise(resolve => setTimeout(resolve, 650));
       setSyncStatus('synced');
       alert("✅ Review session data safely backed up to Google Cloud Firestore. Your progress, flashcards, and notes are now synchronized across all your devices!");
@@ -355,7 +355,7 @@ export default function App() {
     // Always attempt live Firebase lookup to ensure secure validation matches cloud state
     try {
       const docRef = doc(db, 'profiles', emailKey);
-      const docSnap = await getDoc(docRef);
+      const docSnap = await firestoreWithTimeout(getDoc(docRef), 3500);
       if (docSnap.exists()) {
         loadedProfile = docSnap.data() as UserProfile;
       }
@@ -406,7 +406,7 @@ export default function App() {
     let exists = false;
     try {
       const docRef = doc(db, 'profiles', emailKey);
-      const docSnap = await getDoc(docRef);
+      const docSnap = await firestoreWithTimeout(getDoc(docRef), 3500);
       if (docSnap.exists()) {
         exists = true;
       }
@@ -428,7 +428,7 @@ export default function App() {
 
     try {
       const docRef = doc(db, 'profiles', emailKey);
-      await setDoc(docRef, newProfile);
+      await firestoreWithTimeout(setDoc(docRef, newProfile), 3500);
     } catch (err) {
       console.warn("Failed syncing new profile to storage, using local persistence:", err);
     }
