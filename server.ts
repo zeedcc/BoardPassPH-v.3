@@ -205,13 +205,13 @@ app.post('/api/generate-deck', async (req, res) => {
       progressContext = `\nNote: You are currently processing section ${chunkIndex} of ${totalChunks} of the study material. Ensure your cards represent this section specifically.`;
     }
 
-    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Your duty is to read the user's provided notes, study guides, or uploaded books, extract the most critical, high-yield concepts, terms, conditions, and theories, and convert them into high-quality Multiple Choice Question (MCQ) style active recall flashcards.${progressContext}
+    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Your duty is to read the user's provided notes, study guides, or uploaded books, extract the most critical, high-yield concepts, terms, conditions, and theories, and convert them into high-quality Multiple Choice Question (MCQ) style active recall flashcards. WHERE APPLICABLE, use clinical case vignettes based on the notes as the question prompt to test applied knowledge.${progressContext}
 Format details:
-- Each card's 'front' must contain a thought-provoking active recall MCQ question followed by 4 distinct multiple choice options (labeled A, B, C, and D) cleanly separated by newlines.
+- Each card's 'front' must contain a thought-provoking active recall MCQ question (incorporating clinical case vignettes when suitable) followed by 4 distinct multiple choice options (labeled A, B, C, and D) cleanly separated by newlines.
 - Each card's 'back' must clearly state the correct option letter and answer along with a precise, concise clinical explanation. Keep it accurate, easy to digest, yet complete.
 - Each 'hint' is a small cognitive mnemonic or cue to stimulate retrieval.
 
-Generate a highly optimized, high-yield deck of exactly 4 to 5 MCQ flashcards covering the key concepts in the material. Keep descriptions punchy and direct to prioritize fast learning and prevent API execution timeouts.
+Generate a highly optimized, high-yield deck of exactly 4 to 5 MCQ flashcards covering the key concepts and case vignettes from the material. Keep descriptions punchy and direct to prioritize fast learning and prevent API execution timeouts.
 Return your response strictly in JSON matching the requested responseSchema.`;
 
     const modelName = 'gemini-3.5-flash';
