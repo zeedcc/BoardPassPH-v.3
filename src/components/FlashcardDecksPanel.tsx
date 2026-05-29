@@ -573,96 +573,90 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
   // Call Gemini backend to generate custom cards
   const handleTriggerAIGenerator = async () => {
-    const rawNotes = pastedNotes.trim();
-    const rawFileText = fileContentText.trim();
-    
-    if (!rawNotes && !rawFileText) {
-      alert("Please either paste study notes or upload a text file first!");
-      return;
-    }
+  const rawNotes = pastedNotes.trim();
+  const rawFileText = fileContentText.trim();
 
-    // AI Quota check (Double verify)
-    if (!deckApiKey || deckApiKey.trim() === '') {
-      alert("⚠️ Developer API Key Required: You must paste your own Gemini API Key below to synthesize AI Deck cards.");
-      return;
-    }
-
-    setIsGeneratingDeckAI(true);
-    setAiGenerationProgressText("Reading and dividing key chapters...");
-    setAiGenResult([]);
-
-    try {
-  const fullText = `${rawNotes}\n${rawFileText}`.trim();
-
-  const TOTAL_CARDS = 10;
-  const allCards: Flashcard[] = [];
-
-  for (let i = 1; i <= TOTAL_CARDS; i++) {
-    setAiGenerationProgressText(`Generating card ${i} of ${TOTAL_CARDS}...`);
-
-    try {
-      const res = await fetch('/api/generate-deck', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          textPayload: fullText,
-          fileContent: '',
-          fileName: selectedFile?.name || 'Uploaded Notes',
-          cardIndex: i,
-          totalCards: TOTAL_CARDS,
-          customApiKey: deckApiKey
-        })
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Server returned status ${res.status}: ${errorText}`);
-      }
-
-      const data = await res.json();
-
-      if (data.isFallback) {
-        throw new Error(data.msg || 'AI generation failed');
-      }
-
-      if (data.card) {
-        allCards.push({
-          id: `card-${i}-${Date.now()}`,
-          front: data.card.front,
-          back: data.card.back,
-          hint: data.card.hint || '',
-          options: data.card.options || [],
-          correctOption: data.card.correctOption || ''
-        });
-        // Show cards as they arrive
-        setAiGenResult([...allCards]);
-      }
-
-    } catch (err: any) {
-      console.warn(`Error generating card ${i}:`, err);
-      // Skip failed card and continue
-    }
+  if (!rawNotes && !rawFileText) {
+    alert("Please either paste study notes or upload a text file first!");
+    return;
   }
 
-    // Read SSE stream
-    const reader = res.body!.getReader();
-    const decoder = new TextDecoder();
+  if (!deckApiKey || deckApiKey.trim() === '') {
+    alert("⚠️ Developer API Key Required: You must paste your own Gemini API Key below to synthesize AI Deck cards.");
+    return;
+  }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+  setIsGeneratingDeckAI(true);
+  setAiGenerationProgressText("Reading and preparing content...");
+  setAiGenResult([]);
 
-      const lines = decoder.decode(value).split('\n');
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        try {
-          const data = JSON.parse(line.replace('data: ', ''));
+  try {
+    const fullText = `${rawNotes}\n${rawFileText}`.trim();
+    const TOTAL_CARDS = 10;
+    const allCards: Flashcard[] = [];
 
-          if (data.status === 'generating') {
-            setAiGenerationProgressText(
-              `Synthesizing section ${i + 1} of ${chunks.length} — card ${data.current} of ${data.total}...`
-            );
-          }
+    for (let i = 1; i <= TOTAL_CARDS; i++) {
+      setAiGenerationProgressText(`Generating card ${i} of ${TOTAL_CARDS}...`);
+
+      try {
+        const res = await fetch('/api/generate-deck', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            textPayload: fullText,
+            fileContent: '',
+            fileName: selectedFile?.name || 'Uploaded Notes',
+            cardIndex: i,
+            totalCards: TOTAL_CARDS,
+            customApiKey: deckApiKey
+          })
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error(`Server returned status ${res.status}: ${errorText}`);
+        }
+
+        const data = await res.json();
+
+        if (data.isFallback) {
+          throw new Error(data.msg || 'AI generation failed');
+        }
+
+        if (data.card) {
+          allCards.push({
+            id: `card-${i}-${Date.now()}`,
+            front: data.card.front,
+            back: data.card.back,
+            hint: data.card.hint || '',
+            options: data.card.options || [],
+            correctOption: data.card.correctOption || ''
+          });
+          setAiGenResult([...allCards]);
+        }
+      } catch (err: any) {
+        console.warn(`Error generating card ${i}:`, err);
+      }
+    }
+
+    if (allCards.length > 0) {
+      setAiGenResult(allCards);
+      setAiDeckTitle(
+        selectedFile
+          ? `AI - ${selectedFile.name.split('.')[0]}`
+          : `AI - Chapter Review ${new Date().toLocaleDateString()}`
+      );
+    } else {
+      alert("Failed to synthesize flashcards. Please double check that your Gemini API Key is valid.");
+    }
+  } catch (err: any) {
+    console.warn("AI deck generation client error:", err);
+    alert(`AI deck generator failed.\n\nDetails: ${err.message || err}\n\nPlease check your internet connection or verify your Gemini API Key.`);
+  } finally {
+    setIsGeneratingDeckAI(false);
+    setAiGenerationProgressText('');
+  }
+};
 
           if (data.card) {
             const card = data.card;
