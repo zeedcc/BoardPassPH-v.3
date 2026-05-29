@@ -14,10 +14,8 @@ import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-const customDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-const defaultDb = getFirestore(app);
-
-export let db: Firestore = customDb;
+const databaseId = firebaseConfig.firestoreDatabaseId || undefined;
+export const db = getFirestore(app, databaseId);
 
 export const auth = getAuth();
 
@@ -53,81 +51,37 @@ export function initializeFirebase() {
 }
 
 async function testConnection() {
-  // Prevent redundant connection tests during active session
   if (typeof window !== 'undefined' && window.sessionStorage?.getItem('bp_firestore_connected')) {
-    const savedId = window.sessionStorage.getItem('bp_firestore_connected_id');
-    if (savedId === 'default') {
-      db = defaultDb;
-    } else if (savedId === 'custom') {
-      db = customDb;
-    }
     return;
   }
 
-  console.log("Starting Firestore database discovery testing...");
-
-  const testDb = async (dbInstance: Firestore, name: string) => {
-    try {
-      await getDocFromServer(doc(dbInstance, 'test', 'connection'));
-      return name;
-    } catch (err: any) {
-      const msg = err?.message || '';
-      // If it's permission-denied or standard validation rule rejection, the DB exists and is responsive!
-      if (
-        msg.includes('permission') || 
-        msg.includes('Permission') || 
-        msg.includes('rules') || 
-        msg.includes('unauthenticated')
-      ) {
-        return name;
-      }
-      throw err;
-    }
-  };
-
-  const testCustom = testDb(customDb, 'custom')
-    .then(() => {
-      console.log(`Successfully reached custom database: ${firebaseConfig.firestoreDatabaseId}`);
-      db = customDb;
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        window.sessionStorage.setItem('bp_firestore_connected', 'true');
-        window.sessionStorage.setItem('bp_firestore_connected_id', 'custom');
-      }
-      return 'custom';
-    });
-
-  const testDefault = testDb(defaultDb, 'default')
-    .then(() => {
-      console.log("Successfully reached default '(default)' database.");
-      db = defaultDb;
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        window.sessionStorage.setItem('bp_firestore_connected', 'true');
-        window.sessionStorage.setItem('bp_firestore_connected_id', 'default');
-      }
-      return 'default';
-    });
-
+  console.log("Testing Firestore database connection...");
   try {
-    // Race them. If one succeeds fast, select it.
-    await Promise.race([
-      testCustom,
-      testDefault,
-      new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Discovery timed out')), 2500))
-    ]);
-  } catch (err) {
-    // If racing timed out or failed, check sequential fallback:
-    try {
-      await testCustom;
-    } catch {
-      try {
-        await testDefault;
-      } catch (finalError: any) {
-        const msg = finalError?.message || String(finalError);
-        firebaseStatus.errorMessage = msg;
-        console.error("All Firestore database connection attempts failed:", finalError);
-        // Default back to custom as final fallback
-        db = customDb;
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem('bp_firestore_connected', 'true');
+    }
+  } catch (err: any) {
+    const msg = err?.message || String(err);
+    if (msg.includes("Database '(default)' not found")) {
+      firebaseStatus.firestoreDatabaseMissing = true;
+      firebaseStatus.errorMessage = msg;
+      console.error('Firestore database not found. Please verify your Firestore setup.');
+    } else if (msg.includes('the client is offline')) {
+      console.warn('Network offline or client disconnected.');
+    } else if (
+      msg.includes('permission') || 
+      msg.includes('Permission') || 
+      msg.includes('rules') || 
+      msg.includes('unauthenticated')
+    ) {
+      console.log("Firestore database is alive and rules are active.");
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem('bp_firestore_connected', 'true');
       }
+    } else {
+      firebaseStatus.errorMessage = msg;
+      console.warn("Connection test completed with message:", msg);
     }
   }
 }
