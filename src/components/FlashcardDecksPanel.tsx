@@ -166,7 +166,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [deckApiKey, setDeckApiKey] = useState(() => {
     return localStorage.getItem(`bp_gemini_api_key_${profile.email}`) || '';
   });
-  const [numCardsToGenerate, setNumCardsToGenerate] = useState<number>(20);
+  const [numCardsToGenerate, setNumCardsToGenerate] = useState<number>(50);
   
   // Public Decks pool
   const [publicDecks, setPublicDecks] = useState<FlashcardDeck[]>(SEED_PUBLIC_DECKS());
@@ -588,55 +588,74 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   }
 
   setIsGeneratingDeckAI(true);
-  setAiGenerationProgressText("Reading and preparing content...");
+  setAiGenerationProgressText("Reading and chunking content...");
   setAiGenResult([]);
 
   try {
     const fullText = `${rawNotes}\n${rawFileText}`.trim();
-    const TOTAL_CARDS = numCardsToGenerate;
+
+    // Split content into semantic chunks so nothing is skipped
+    const CHUNK_SIZE = 6000;
+    const chunks = splitTextIntoSemanticChunks(fullText, CHUNK_SIZE);
+
+    // Calculate cards per chunk — distribute numCardsToGenerate across chunks,
+    // but always generate at least 1 card per chunk so the whole doc is covered.
+    const cardsPerChunk = Math.max(1, Math.ceil(numCardsToGenerate / chunks.length));
+    const TOTAL_CARDS = cardsPerChunk * chunks.length; // actual total, may exceed slider
+
     const allCards: Flashcard[] = [];
+    let globalCardIndex = 0;
 
-    for (let i = 1; i <= TOTAL_CARDS; i++) {
-      setAiGenerationProgressText(`Generating card ${i} of ${TOTAL_CARDS}...`);
+    for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+      const chunk = chunks[chunkIdx];
 
-      try {
-        const res = await fetch('/api/generate-deck', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            textPayload: fullText,
-            fileContent: '',
-            fileName: selectedFile?.name || 'Uploaded Notes',
-            cardIndex: i,
-            totalCards: TOTAL_CARDS,
-            customApiKey: deckApiKey
-          })
-        });
+      for (let localIdx = 1; localIdx <= cardsPerChunk; localIdx++) {
+        globalCardIndex++;
+        setAiGenerationProgressText(
+          `Chunk ${chunkIdx + 1}/${chunks.length} — card ${globalCardIndex} of ~${TOTAL_CARDS}...`
+        );
 
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`Server returned status ${res.status}: ${errorText}`);
-        }
-
-        const data = await res.json();
-
-        if (data.isFallback) {
-          throw new Error(data.msg || 'AI generation failed');
-        }
-
-        if (data.card) {
-          allCards.push({
-            id: `card-${i}-${Date.now()}`,
-            front: data.card.front,
-            back: data.card.back,
-            hint: data.card.hint || '',
-            options: data.card.options || [],
-            correctOption: data.card.correctOption || ''
+        try {
+          const res = await fetch('/api/generate-deck', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              textPayload: chunk,          // send only this chunk, not the full text
+              fileContent: '',
+              fileName: selectedFile?.name || 'Uploaded Notes',
+              cardIndex: localIdx,
+              totalCards: cardsPerChunk,
+              customApiKey: deckApiKey
+            })
           });
-          setAiGenResult([...allCards]);
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`Server returned status ${res.status}: ${errorText}`);
+          }
+
+          const data = await res.json();
+
+          if (data.isFallback) {
+            console.warn(`Chunk ${chunkIdx + 1}, card ${localIdx} fallback:`, data.msg);
+            continue;
+          }
+
+          if (data.card) {
+            const newCard: Flashcard = {
+              id: `card-${globalCardIndex}-${Date.now()}`,
+              front: data.card.front,
+              back: data.card.back,
+              hint: data.card.hint || '',
+              options: data.card.options || [],
+              correctOption: data.card.correctOption || ''
+            };
+            allCards.push(newCard);
+            setAiGenResult([...allCards]); // live preview as cards arrive
+          }
+        } catch (err: any) {
+          console.warn(`Error generating card ${globalCardIndex}:`, err);
         }
-      } catch (err: any) {
-        console.warn(`Error generating card ${i}:`, err);
       }
     }
 
@@ -2935,14 +2954,15 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">
-                      Number of Cards to Generate
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={numCardsToGenerate}
-                      onChange={(e) => setNumCardsToGenerate(Math.max(1, parseInt(e.target.value) || 1))}
+  Cards per Document Chunk (total scales with file size)
+</label>
+<input
+  type="number"
+  min={1}
+  max={200}
+  step={1}
+  value={numCardsToGenerate}
+  onChange={(e) => setNumCardsToGenerate(Math.max(1, Math.min(200, parseInt(e.target.value) || 1)))}
                       disabled={isGeneratingDeckAI || isParsingFile}
                       className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono font-bold outline-none focus:border-pine focus:ring-1 focus:ring-pine/20 transition disabled:opacity-50"
                     />
