@@ -1573,105 +1573,123 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
               {/* CARD FRONT / ACTIVE VIEW */}
               {activeSessionRoom.status === 'active' && (
                 <div className="flex-grow flex flex-col pt-4 overflow-hidden">
-                  <div className="px-6 flex-1 overflow-y-auto">
-                    <div className="max-w-md mx-auto w-full">
-                      <div className="bg-white rounded-[40px] shadow-sm border border-gray-100 min-h-[380px] flex flex-col overflow-hidden">
-                        <div className="p-8 pb-4">
+                  <div className="px-4 flex-1 overflow-y-auto">
+                    <div className="max-w-md mx-auto w-full space-y-6 pb-20">
+                      <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 flex flex-col overflow-hidden">
+                        <div className="p-6 pb-4">
                           <div className="flex items-center gap-1.5 mb-2">
-                            <Zap className="w-4 h-4 text-green-500 fill-green-500" />
-                            <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">High Yield</span>
+                            <Zap className="w-3.5 h-3.5 text-green-500 fill-green-500" />
+                            <span className="text-[9px] font-black text-green-600 uppercase tracking-widest">High Yield Concept</span>
                           </div>
-                          <h2 className="text-xl font-black text-gray-900 leading-snug tracking-tight">
+                          <h2 className="text-lg font-black text-gray-900 leading-snug tracking-tight">
                             {activeSessionRoom.cards[activeSessionRoom.currentCardIndex].front}
                           </h2>
                         </div>
 
-                        <div className="flex-1 px-4 py-4 space-y-px">
-                          {activeSessionRoom.cards[activeSessionRoom.currentCardIndex].options?.map((opt, idx) => {
-                            const memberKey = profile.email.replace(/\./g, '_');
-                            const hasSubmitted = activeSessionRoom.participants[memberKey]?.submittedAnswer;
-                            const myAnswer = activeSessionRoom.participants[memberKey]?.lastAnswerText;
-                            const isCorrect = opt === activeSessionRoom.cards[activeSessionRoom.currentCardIndex].correctOption;
-                            const isSelected = myAnswer === opt;
-                            
-                            return (
+                        <div className="px-6 pb-6 pt-2 space-y-2">
+                          {activeSessionRoom.cards[activeSessionRoom.currentCardIndex].options?.length ? (
+                            activeSessionRoom.cards[activeSessionRoom.currentCardIndex].options.map((opt, idx) => {
+                              const memberKey = profile.email.replace(/\./g, '_');
+                              const hasSubmitted = activeSessionRoom.participants[memberKey]?.submittedAnswer;
+                              const myAnswer = activeSessionRoom.participants[memberKey]?.lastAnswerText;
+                              const isCorrect = opt === activeSessionRoom.cards[activeSessionRoom.currentCardIndex].correctOption;
+                              const isSelected = myAnswer === opt;
+                              
+                              return (
+                                <button
+                                  key={idx}
+                                  disabled={hasSubmitted}
+                                  onClick={() => handleSubmitMyWrittenRecallAnswer(opt)}
+                                  className={`
+                                    w-full py-3.5 px-6 text-center text-xs font-black uppercase tracking-tight transition-all border border-gray-100 rounded-2xl cursor-pointer shadow-xs
+                                    ${hasSubmitted 
+                                      ? isCorrect 
+                                        ? 'bg-green-50 border-green-200 text-green-700' 
+                                        : isSelected ? 'bg-rose-50 border-rose-200 text-rose-700' : 'text-gray-300 bg-gray-50 border-transparent opacity-60'
+                                      : 'bg-white hover:bg-pine/5 hover:border-pine hover:text-pine text-gray-800 active:scale-[0.98]'
+                                    }
+                                  `}
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="space-y-4 py-2">
+                              <textarea
+                                rows={4}
+                                value={myWrittenAnswer}
+                                onChange={(e) => setMyWrittenAnswer(e.target.value)}
+                                placeholder="Type your clinical recall here..."
+                                className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pine rounded-2xl p-5 text-sm font-medium outline-none transition shadow-inner"
+                              />
                               <button
-                                key={idx}
-                                disabled={hasSubmitted}
-                                onClick={() => handleSubmitMyWrittenRecallAnswer(opt)}
-                                className={`
-                                  w-full py-5 px-8 text-center text-sm font-black uppercase tracking-tight transition-all border-b border-gray-50 last:border-0 cursor-pointer
-                                  ${hasSubmitted 
-                                    ? isCorrect 
-                                      ? 'bg-green-50 text-green-700' 
-                                      : isSelected ? 'bg-rose-50 text-rose-700' : 'text-gray-400 bg-white'
-                                    : 'bg-white hover:bg-gray-50 text-gray-800 active:scale-[0.98]'
-                                  }
-                                `}
+                                onClick={() => handleSubmitMyWrittenRecallAnswer()}
+                                className="w-full py-4 bg-pine hover:bg-pine-mid text-white text-xs font-black uppercase tracking-widest rounded-2xl transition shadow-lg cursor-pointer"
                               >
-                                {opt}
+                                Submit Recall Answer
                               </button>
-                            );
-                          })}
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       {/* Bottom Utility Actions */}
-                      <div className="mt-8 space-y-3">
+                      <div className="space-y-3">
                         <div className="grid grid-cols-2 gap-3">
                           <button 
-                            onClick={() => alert(`Hint: ${activeSessionRoom.cards[activeSessionRoom.currentCardIndex].hint || "Focus on the key clinical diagnostic traits."}`)}
-                            className="flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-200 rounded-full text-xs font-black text-gray-600 shadow-sm cursor-pointer hover:bg-gray-50 transition"
+                            onClick={() => alert(`Contextual retrieval cue: ${activeSessionRoom.cards[activeSessionRoom.currentCardIndex].hint || "Think of the primary psychopathology hallmarks."}`)}
+                            className="flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-100 rounded-full text-[10px] font-black text-gray-600 shadow-xs cursor-pointer hover:bg-gray-50 transition"
                           >
-                            <Key className="w-4 h-4 text-amber-500 fill-amber-500" />
-                            Hint
+                            <Key className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                            Use Hint Key
                           </button>
                           <button 
                             onClick={() => {
                               const memberKey = profile.email.replace(/\./g, '_');
                               if (!activeSessionRoom.participants[memberKey]?.submittedAnswer) {
                                 setProfile(prev => prev ? ({ ...prev, totalXp: Math.max(0, prev.totalXp - 5) }) : prev);
-                                alert("Penalty: -5 XP for revealing without an attempt!");
+                                alert("Penalty: -5 XP for using reveal before making a clinical choice!");
                               }
                               handleSubmitMyWrittenRecallAnswer(activeSessionRoom.cards[activeSessionRoom.currentCardIndex].correctOption);
                             }}
-                            className="flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-200 rounded-full text-xs font-black text-gray-600 shadow-sm cursor-pointer hover:bg-gray-50 transition"
+                            className="flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-100 rounded-full text-[10px] font-black text-gray-600 shadow-xs cursor-pointer hover:bg-gray-50 transition"
                           >
-                            <BookOpen className="w-4 h-4 text-rose-500" />
-                            Reveal
+                            <BookOpen className="w-3.5 h-3.5 text-rose-500" />
+                            Reveal Answer
                           </button>
                         </div>
                         <button 
                           onClick={() => {
                             const memberKey = profile.email.replace(/\./g, '_');
                             if (activeSessionRoom.participants[memberKey]?.submittedAnswer || activeSessionRoom.status === 'reveal') {
-                              alert(`Explanation: ${activeSessionRoom.cards[activeSessionRoom.currentCardIndex].back}`);
+                              alert(`Rationale: ${activeSessionRoom.cards[activeSessionRoom.currentCardIndex].back}`);
                             } else {
-                              alert("Submit an answer first to unlock the clinical explanation!");
+                              alert("Unlock rationale by submitting your answer first!");
                             }
                           }}
-                          className="w-full flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-200 rounded-full text-xs font-black text-gray-600 shadow-sm cursor-pointer hover:bg-gray-50 transition"
+                          className="w-full flex items-center justify-center gap-2 py-3.5 bg-white border border-gray-100 rounded-full text-[10px] font-black text-gray-600 shadow-xs cursor-pointer hover:bg-gray-50 transition"
                         >
-                          <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] text-white">✨</div>
-                          Explain
+                          <div className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center text-[8px] text-white">i</div>
+                          Detailed Explanation
                         </button>
                       </div>
 
-                      {/* Manual Navigation for Solvents */}
-                      <div className="mt-12 flex justify-center gap-4 pb-12">
+                      {/* Manual Navigation */}
+                      <div className="flex justify-center gap-6 pt-4 pb-12">
                         <button 
                           onClick={() => handleUpdateCurrentCardIndex(activeSessionRoom.currentCardIndex - 1)}
                           disabled={activeSessionRoom.currentCardIndex === 0}
-                          className="w-24 py-3 bg-gray-100 rounded-[24px] flex items-center justify-center disabled:opacity-30 cursor-pointer hover:bg-gray-200"
+                          className="w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-full flex items-center justify-center disabled:opacity-20 cursor-pointer hover:bg-gray-50 active:scale-95 transition"
                         >
-                          <ChevronLeft className="w-5 h-5 text-gray-600" />
+                          <ChevronLeft className="w-6 h-6 text-gray-400" />
                         </button>
                         <button 
                           onClick={() => handleUpdateCurrentCardIndex(activeSessionRoom.currentCardIndex + 1)}
                           disabled={activeSessionRoom.currentCardIndex >= activeSessionRoom.cards.length - 1}
-                          className="w-24 py-3 bg-gray-100 rounded-[24px] flex items-center justify-center disabled:opacity-30 cursor-pointer hover:bg-gray-200"
+                          className="w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-full flex items-center justify-center disabled:opacity-20 cursor-pointer hover:bg-gray-50 active:scale-95 transition"
                         >
-                          <ChevronRight className="w-5 h-5 text-gray-600" />
+                          <ChevronRight className="w-6 h-6 text-gray-400" />
                         </button>
                       </div>
                     </div>
