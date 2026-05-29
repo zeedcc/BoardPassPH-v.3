@@ -83,7 +83,7 @@ Format your questions strictly based on the requested focal subject area and dif
 
 Return your response strictly in JSON matching the requested responseSchema. Options must always be exactly a 4-item array.`;
 
-    const modelName = 'gemini-2.0-flash';
+    const modelName = 'gemini-1.5-flash';
     const response = await ai.models.generateContent({
       model: modelName,
       contents: `Formulate a simulated board exam question focusing on "${focusArea || 'any DSM-5 chapter'}" with difficulty level "${difficulty || 'random'}".${historyInput}${contextInput}`,
@@ -141,7 +141,7 @@ app.post('/api/generate-mnemonic', async (req, res) => {
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash',
       contents: `Create an original, clever, high-yield clinical mnemonic, acronym, or cognitive memory cue to easily memorize the diagnostic criteria, psychopharmacological treatment, or subscale metrics related to this board review item:
 Vignette: ${vignette}
 Explanation: ${explanation}
@@ -214,7 +214,7 @@ Format details:
 Generate a highly optimized, high-yield deck of exactly 4 to 5 MCQ flashcards covering the key concepts and case vignettes from the material. Keep descriptions punchy and direct to prioritize fast learning and prevent API execution timeouts.
 Return your response strictly in JSON matching the requested responseSchema.`;
 
-    const modelName = 'gemini-2.0-flash';
+    const modelName = 'gemini-1.5-flash';
     const response = await ai.models.generateContent({
       model: modelName,
       contents: `Read all the following study references and formulate a comprehensive set of study flashcards covering every important note, definition, and concept: ${referenceInput}`,
