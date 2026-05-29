@@ -38,11 +38,37 @@ function getGemini(): GoogleGenAI | null {
   return aiClient;
 }
 
+// Shared Fallback Helper for Gemini AI Models
+const FALLBACK_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-2.5-pro'
+];
+
+async function generateContentWithFallback(ai: GoogleGenAI, request: any) {
+  let lastError: any = null;
+  for (const model of FALLBACK_MODELS) {
+    try {
+      console.log(`[AI] Attempting generation with model: ${model}`);
+      const fallbackRequest = { ...request, model };
+      const response = await ai.models.generateContent(fallbackRequest);
+      return response;
+    } catch (err: any) {
+      console.warn(`[AI] Model ${model} failed:`, err?.message || err);
+      lastError = err;
+      // Continue to next fallback model
+    }
+  }
+  throw lastError; // if all fail
+}
+
 // REST end points for BoardPassPH AI engines
 app.post('/api/generate-question', async (req, res) => {
   const { focusArea, source, difficulty, fileData, fileMimeType, history, customApiKey } = req.body;
   const ai = customApiKey && customApiKey.trim() !== '' 
-      ? new GoogleGenAI({ apiKey: key,  }) 
+      ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }) 
       : getGemini();
 
   if (!ai) {
@@ -83,9 +109,7 @@ Format your questions strictly based on the requested focal subject area and dif
 
 Return your response strictly in JSON matching the requested responseSchema. Options must always be exactly a 4-item array.`;
 
-    const modelName = 'gemini-1.5-flash';
-    const response = await ai.models.generateContent({
-      model: modelName,
+    const response = await generateContentWithFallback(ai, {
       contents: `Formulate a simulated board exam question focusing on "${focusArea || 'any DSM-5 chapter'}" with difficulty level "${difficulty || 'random'}".${historyInput}${contextInput}`,
       config: {
         systemInstruction: sysInstruct,
@@ -140,8 +164,7 @@ app.post('/api/generate-mnemonic', async (req, res) => {
   }
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash',
+    const response = await generateContentWithFallback(ai, {
       contents: `Create an original, clever, high-yield clinical mnemonic, acronym, or cognitive memory cue to easily memorize the diagnostic criteria, psychopharmacological treatment, or subscale metrics related to this board review item:
 Vignette: ${vignette}
 Explanation: ${explanation}
@@ -214,9 +237,7 @@ Format details:
 Generate a highly optimized, high-yield deck of exactly 4 to 5 MCQ flashcards covering the key concepts and case vignettes from the material. Keep descriptions punchy and direct to prioritize fast learning and prevent API execution timeouts.
 Return your response strictly in JSON matching the requested responseSchema.`;
 
-    const modelName = 'gemini-1.5-flash';
-    const response = await ai.models.generateContent({
-      model: modelName,
+    const response = await generateContentWithFallback(ai, {
       contents: `Read all the following study references and formulate a comprehensive set of study flashcards covering every important note, definition, and concept: ${referenceInput}`,
       config: {
         systemInstruction: sysInstruct,
