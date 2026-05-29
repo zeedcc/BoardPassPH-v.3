@@ -42,7 +42,7 @@ function getGemini(): GoogleGenAI | null {
 app.post('/api/generate-question', async (req, res) => {
   const { focusArea, source, difficulty, fileData, fileMimeType, history, customApiKey } = req.body;
   const ai = customApiKey && customApiKey.trim() !== '' 
-      ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }) 
+      ? new GoogleGenAI({ apiKey: key,  }) 
       : getGemini();
 
   if (!ai) {
