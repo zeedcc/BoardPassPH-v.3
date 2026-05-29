@@ -778,14 +778,38 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
         // Check if all active submitted answer
         const keys = Object.keys(room.participants);
-        const activeAnswers = keys.filter(k => room.participants[k].submittedAnswer);
-        if (activeAnswers.length === keys.length) {
-          setPlayersDoneSubmitting(true);
+        if (keys.length > 0) {
+          const allSubmitted = keys.every(k => room.participants[k].submittedAnswer);
+          setPlayersDoneSubmitting(allSubmitted);
+
+          // AUTO-REVEAL Logic: If everyone is done and I'm the host, automatically reveal
+          if (allSubmitted && room.status === 'active' && room.hostEmail === profile.email) {
+            handleHostRevealAnswerBackFromSnapshot(room.id);
+          }
         } else {
           setPlayersDoneSubmitting(false);
         }
       }
     });
+  };
+
+  // Helper for auto-reveal from snapshot to avoid stale state issues
+  const handleHostRevealAnswerBackFromSnapshot = async (roomId: string) => {
+    try {
+      const docRef = doc(db, 'liveRecallSessions', roomId);
+      await updateDoc(docRef, {
+        status: 'reveal',
+        chatMessages: arrayUnion({
+          id: `msg-auto-${Date.now()}`,
+          senderName: "Host Bot",
+          senderEmail: "admin@boardpassph.com",
+          text: "All candidates have submitted their choices. Board Exam Correct Answer revealed!",
+          timestamp: new Date().toLocaleTimeString()
+        })
+      });
+    } catch (err) {
+      console.warn("Auto reveal failed:", err);
+    }
   };
 
   // Solo mode automation loops (AI review companions)
@@ -801,15 +825,26 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       if (isAlreadySubmitted) return;
 
       const timerIdx = setTimeout(async () => {
-        // Prepare mock answers based on current card's back
+        // Prepare mock answers based on current card
         const currentCard = activeSessionRoom.cards[activeSessionRoom.currentCardIndex];
-        const answersOptions = [
-          `I think it's: ${currentCard.back.substring(0, 50)}...`,
-          `Ah, is that the one that requires ${currentCard.hint || "active phase validation"}?`,
-          `I recall this! Let's write down: ${currentCard.back.split('.')[0] || "6 months criteria"}`
-        ];
-
-        const randomAns = answersOptions[Math.floor(Math.random() * answersOptions.length)];
+        let randomAns = '';
+        
+        if (currentCard.options && currentCard.options.length > 0) {
+          // Weighted choice: peer often gets it right, sometimes wrong
+          const getCorrect = Math.random() > 0.3;
+          if (getCorrect && currentCard.correctOption) {
+            randomAns = currentCard.correctOption;
+          } else {
+            randomAns = currentCard.options[Math.floor(Math.random() * currentCard.options.length)];
+          }
+        } else {
+          const answersOptions = [
+            `I think it's: ${currentCard.back.substring(0, 50)}...`,
+            `Ah, is that the one that requires ${currentCard.hint || "active phase validation"}?`,
+            `I recall this! Let's write down: ${currentCard.back.split('.')[0] || "6 months criteria"}`
+          ];
+          randomAns = answersOptions[Math.floor(Math.random() * answersOptions.length)];
+        }
 
         try {
           const docRef = doc(db, 'liveRecallSessions', activeSessionRoom.id);
@@ -1594,41 +1629,39 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                               const myAnswer = activeSessionRoom.participants[memberKey]?.lastAnswerText;
                               const isCorrect = opt === activeSessionRoom.cards[activeSessionRoom.currentCardIndex].correctOption;
                               const isSelected = myAnswer === opt;
+                              const isReveal = activeSessionRoom.status === 'reveal';
                               
                               return (
                                 <button
                                   key={idx}
-                                  disabled={hasSubmitted}
+                                  disabled={hasSubmitted || isReveal}
                                   onClick={() => handleSubmitMyWrittenRecallAnswer(opt)}
                                   className={`
                                     w-full py-3.5 px-6 text-center text-xs font-black uppercase tracking-tight transition-all border border-gray-100 rounded-2xl cursor-pointer shadow-xs
-                                    ${hasSubmitted 
+                                    ${isReveal
                                       ? isCorrect 
-                                        ? 'bg-green-50 border-green-200 text-green-700' 
+                                        ? 'bg-green-50 border-green-200 text-green-700 ring-2 ring-green-100' 
                                         : isSelected ? 'bg-rose-50 border-rose-200 text-rose-700' : 'text-gray-300 bg-gray-50 border-transparent opacity-60'
-                                      : 'bg-white hover:bg-pine/5 hover:border-pine hover:text-pine text-gray-800 active:scale-[0.98]'
+                                      : isSelected
+                                        ? 'bg-pine-mid border-pine text-white animate-pulse'
+                                        : hasSubmitted
+                                          ? 'bg-gray-50 text-gray-400 border-gray-100 opacity-80'
+                                          : 'bg-white hover:bg-pine/5 hover:border-pine hover:text-pine text-gray-800 active:scale-[0.98]'
                                     }
                                   `}
                                 >
                                   {opt}
+                                  {isSelected && !isReveal && <span className="ml-2 opacity-50">(Selected)</span>}
                                 </button>
                               );
                             })
                           ) : (
-                            <div className="space-y-4 py-2">
-                              <textarea
-                                rows={4}
-                                value={myWrittenAnswer}
-                                onChange={(e) => setMyWrittenAnswer(e.target.value)}
-                                placeholder="Type your clinical recall here..."
-                                className="w-full bg-gray-50 border border-gray-100 focus:bg-white focus:border-pine rounded-2xl p-5 text-sm font-medium outline-none transition shadow-inner"
-                              />
-                              <button
-                                onClick={() => handleSubmitMyWrittenRecallAnswer()}
-                                className="w-full py-4 bg-pine hover:bg-pine-mid text-white text-xs font-black uppercase tracking-widest rounded-2xl transition shadow-lg cursor-pointer"
-                              >
-                                Submit Recall Answer
-                              </button>
+                            <div className="p-8 text-center space-y-4">
+                              <AlertCircle className="w-12 h-12 text-amber-400 mx-auto" />
+                              <div className="space-y-1">
+                                <h4 className="text-sm font-black text-gray-800 uppercase">Legacy Deck Format</h4>
+                                <p className="text-[10px] text-gray-500 font-medium">BoardPassPH now exclusively uses synced MCQ. Please generate a new AI deck for the updated Board Exam Arena experience.</p>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1675,23 +1708,31 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                         </button>
                       </div>
 
-                      {/* Manual Navigation */}
-                      <div className="flex justify-center gap-6 pt-4 pb-12">
-                        <button 
-                          onClick={() => handleUpdateCurrentCardIndex(activeSessionRoom.currentCardIndex - 1)}
-                          disabled={activeSessionRoom.currentCardIndex === 0}
-                          className="w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-full flex items-center justify-center disabled:opacity-20 cursor-pointer hover:bg-gray-50 active:scale-95 transition"
-                        >
-                          <ChevronLeft className="w-6 h-6 text-gray-400" />
-                        </button>
-                        <button 
-                          onClick={() => handleUpdateCurrentCardIndex(activeSessionRoom.currentCardIndex + 1)}
-                          disabled={activeSessionRoom.currentCardIndex >= activeSessionRoom.cards.length - 1}
-                          className="w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-full flex items-center justify-center disabled:opacity-20 cursor-pointer hover:bg-gray-50 active:scale-95 transition"
-                        >
-                          <ChevronRight className="w-6 h-6 text-gray-400" />
-                        </button>
-                      </div>
+                      {/* Manual Navigation - Host Only & Sync Locked */}
+                      {activeSessionRoom.hostEmail === profile.email && (
+                        <div className="flex justify-center gap-6 pt-4 pb-12">
+                          <button 
+                            onClick={() => handleUpdateCurrentCardIndex(activeSessionRoom.currentCardIndex - 1)}
+                            disabled={activeSessionRoom.currentCardIndex === 0}
+                            className="w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-full flex items-center justify-center disabled:opacity-20 cursor-pointer hover:bg-gray-50 active:scale-95 transition"
+                          >
+                            <ChevronLeft className="w-6 h-6 text-gray-400" />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              if (!playersDoneSubmitting) {
+                                alert("Board Exam Rules: All candidates must submit their answers before proceeding to the next item.");
+                                return;
+                              }
+                              handleUpdateCurrentCardIndex(activeSessionRoom.currentCardIndex + 1);
+                            }}
+                            disabled={activeSessionRoom.currentCardIndex >= activeSessionRoom.cards.length - 1 || !playersDoneSubmitting}
+                            className={`w-16 h-16 bg-white border border-gray-100 shadow-sm rounded-full flex items-center justify-center disabled:opacity-20 cursor-pointer transition active:scale-95 ${playersDoneSubmitting ? 'hover:bg-pine/5 ring-4 ring-pine/10 ring-offset-2' : 'hover:bg-gray-50'}`}
+                          >
+                            <ChevronRight className={`w-6 h-6 ${playersDoneSubmitting ? 'text-pine' : 'text-gray-400'}`} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1777,13 +1818,24 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                     )}
 
                     {activeSessionRoom.hostEmail === profile.email && (
-                      <div className="pt-4 flex justify-center">
+                      <div className="pt-4 flex flex-col items-center gap-3">
+                        {!playersDoneSubmitting && (
+                          <p className="text-[10px] text-amber-600 font-bold bg-amber-50 px-4 py-2 rounded-full border border-amber-100 animate-pulse">
+                            Waiting for all candidates to submit answers...
+                          </p>
+                        )}
                         <button
                           onClick={handleHostProceedToNextRecallQuiz}
-                          className="px-6 py-2.5 bg-pine hover:bg-pine-mid text-white text-xs font-black uppercase tracking-widest rounded-xl transition border-b-2 border-pine-mid flex items-center gap-1 cursor-pointer"
+                          disabled={!playersDoneSubmitting}
+                          className={`px-8 py-3 text-white text-xs font-black uppercase tracking-widest rounded-xl transition border-b-4 flex items-center gap-2 cursor-pointer
+                            ${playersDoneSubmitting 
+                              ? 'bg-pine hover:bg-pine-mid border-pine-mid active:translate-y-0.5 active:border-b-0' 
+                              : 'bg-gray-200 border-gray-300 opacity-50 cursor-not-allowed'
+                            }
+                          `}
                         >
-                          <span>Proceed to Next Card</span>
-                          <ChevronRight className="w-4 h-4 text-mint" />
+                          <span>{activeSessionRoom.currentCardIndex >= activeSessionRoom.cards.length - 1 ? "Complete Arena Session" : "Proceed to Next Board Item"}</span>
+                          <ChevronRight className="w-4 h-4" />
                         </button>
                       </div>
                     )}
@@ -2226,9 +2278,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                         Remove
                       </button>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3">
                         <div className="space-y-1">
-                          <label className="text-[9px] uppercase font-black text-gray-400">Card Front (Active Prompt)</label>
+                          <label className="text-[9px] uppercase font-black text-gray-400">Board Question / MCQ Vignette</label>
                           <textarea
                             value={card.front}
                             onChange={(e) => {
@@ -2236,39 +2288,24 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                               updated[idx].front = e.target.value;
                               setNewDeckCards(updated);
                             }}
-                            placeholder="e.g. What is the diagnosis rule of Schizoid disorder?&#10;A) ...&#10;B) ... "
+                            placeholder="e.g. A 25-year-old client reports zero interest in relationships and social detachment. Which diagnosis aligns?&#10;A) Schizoid&#10;B) Schizotypal..."
                             className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium outline-none resize-y min-h-[60px]"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[9px] uppercase font-black text-gray-400">Card Back (Gold standard answer)</label>
-                          <input
-                            type="text"
+                          <label className="text-[9px] uppercase font-black text-gray-400">Clinical Rationale (Back of card)</label>
+                          <textarea
+                            rows={2}
                             value={card.back}
                             onChange={(e) => {
                               const updated = [...newDeckCards];
                               updated[idx].back = e.target.value;
                               setNewDeckCards(updated);
                             }}
-                            placeholder="e.g. Absolute social detachment, zero interest in relationships."
+                            placeholder="Provide rationale for the correct board choice and explain rule-outs."
                             className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium outline-none"
                           />
                         </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[9px] uppercase font-black text-gray-400">Memory Hint / Acronym (Optional)</label>
-                        <input
-                          type="text"
-                          value={card.hint}
-                          onChange={(e) => {
-                            const updated = [...newDeckCards];
-                            updated[idx].hint = e.target.value;
-                            setNewDeckCards(updated);
-                          }}
-                          placeholder="e.g. Think of a hermit totally isolated."
-                          className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-[11px] outline-none"
-                        />
                       </div>
                     </div>
                   ))}

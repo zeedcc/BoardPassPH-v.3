@@ -228,16 +228,17 @@ app.post('/api/generate-deck', async (req, res) => {
       progressContext = `\nNote: You are currently processing section ${chunkIndex} of ${totalChunks} of the study material. Ensure your cards represent this section specifically.`;
     }
 
-    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Your duty is to read the user's provided notes, study guides, or uploaded books, extract the most critical, high-yield concepts, terms, conditions, and theories, and convert them into high-quality Multiple Choice Question (MCQ) style active recall flashcards. WHERE APPLICABLE, use clinical case vignettes based on the notes as the question prompt to test applied knowledge.${progressContext}
+    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Your duty is to read the user's provided notes, study guides, or uploaded books, extract the most critical, high-yield concepts, terms, conditions, and theories, and convert them into strictly professional Multiple Choice Question (MCQ) board-exam type flashcards.
+CRITICAL: Do NOT generate identification or fill-in-the-blank questions. Every card MUST have exactly four multiple choice options.
+WHERE APPLICABLE, use realistic clinical case vignettes based on the notes as the question prompt to test applied clinical reasoning. ${progressContext}
 Format details:
-- Each card's 'front' must contain just the thought-provoking active recall MCQ question (incorporating clinical case vignettes when suitable).
-- Provide the 4 multiple choice options inside the 'options' JSON array.
+- Each card's 'front' must contain a professional, board-exam style clinical MCQ prompt or case vignette.
+- Provide exactly 4 multiple choice options inside the 'options' JSON array.
 - The 'correctOption' field MUST exactly match one of the options in the array.
-- Each card's 'back' must clearly state a concise, precise clinical explanation of why the correct option is right and the others are wrong.
-- Each 'hint' is a small cognitive mnemonic or cue to stimulate retrieval.
+- Each card's 'back' must clearly state a concise, precise clinical explanation of why the correct option is right and the others are wrong (Rationale).
+- Each 'hint' is a small cognitive mnemonic or retrieval cue.
 
-Generate a highly optimized, high-yield deck of exactly 10 MCQ flashcards covering the key concepts and case vignettes from the material. Keep descriptions punchy and direct to prioritize fast learning and prevent API execution timeouts.
-Return your response strictly in JSON matching the requested responseSchema.`;
+Generate a highly optimized, high-yield deck of exactly 10 professional MCQ flashcards. Return your response strictly in JSON matching the requested responseSchema.`;
 
     const response = await generateContentWithFallback(ai, {
       contents: `Read all the following study references and formulate a comprehensive set of study flashcards covering every important note, definition, and concept: ${referenceInput}`,
