@@ -172,7 +172,9 @@ export default function App() {
 
   // Load profile upon startup on this client
   useEffect(() => {
-    initializeFirebase();
+    initializeFirebase().catch((err) => {
+      console.warn('Firebase initialization failed:', err);
+    });
     const initializeProfile = async () => {
       try {
         const lastEmail = localStorage.getItem('bp_last_logged_email');
@@ -271,15 +273,17 @@ export default function App() {
       if (!syncEmail) {
         throw new Error("Profile email is missing.");
       }
+      const sanitizedProfile = JSON.parse(JSON.stringify(profile));
       const docRef = doc(db, 'profiles', syncEmail);
-      await firestoreWithTimeout(setDoc(docRef, profile), 4500);
+      await firestoreWithTimeout(setDoc(docRef, sanitizedProfile), 4500);
       await new Promise(resolve => setTimeout(resolve, 650));
       setSyncStatus('synced');
       alert("✅ Review session data safely backed up to Google Cloud Firestore. Your progress, flashcards, and notes are now synchronized across all your devices!");
     } catch (err: any) {
-      console.warn("Manual cloud sync failed:", err);
+      console.error("Manual cloud sync failed:", err);
       setSyncStatus('synced');
-      alert(`❌ Manual cloud sync failed: ${err?.message || String(err) || 'Unknown connection error'}. Make sure you are signed in and Firestore rules are deployed.`);
+      const errorMessage = err?.message || String(err) || 'Unknown connection error';
+      alert(`❌ Manual cloud sync failed: ${errorMessage}. If you are still blocked, verify your Firestore security rules and anonymous authentication status, then check the browser console for the raw error.`);
     }
   };
 
