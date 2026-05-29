@@ -109,7 +109,65 @@ Format your questions strictly based on the requested focal subject area and dif
 
 Return your response strictly in JSON matching the requested responseSchema. Options must always be exactly a 4-item array.`;
 
-    app.post('/api/generate-deck', async (req, res) => {
+    const response = await generateContentWithFallback(ai, {
+      contents: `Generate a professional board exam MCQ question for the PmLE. Focus area: ${focusArea || 'General Psychology'}. Difficulty: ${difficulty || 'Medium'}. Source: ${source || 'General'}. ${contextInput} ${historyInput}`,
+      config: {
+        systemInstruction: sysInstruct,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          required: ['topic', 'vignette', 'options', 'answer', 'explanation'],
+          properties: {
+            topic: { type: Type.STRING },
+            vignette: { type: Type.STRING },
+            options: { type: Type.ARRAY, items: { type: Type.STRING } },
+            answer: { type: Type.STRING },
+            explanation: { type: Type.STRING }
+          }
+        }
+      }
+    });
+
+    const question = JSON.parse(response.text || '{}');
+    return res.json({ question, isFallback: false });
+
+  } catch (err: any) {
+    console.error('Question generation error:', err.message || err);
+    return res.json({ isFallback: true, msg: err.message || 'Generation failed' });
+  }
+});
+
+app.post('/api/generate-mnemonic', async (req, res) => {
+  const { vignette, explanation } = req.body;
+  const ai = getGemini();
+
+  if (!ai) {
+    return res.json({ isFallback: true });
+  }
+
+  try {
+    const response = await generateContentWithFallback(ai, {
+      contents: `Create an original, clever, high-yield clinical mnemonic, acronym, or cognitive memory cue to easily memorize the diagnostic criteria, psychopharmacological treatment, or subscale metrics related to this board review item:
+Vignette: ${vignette}
+Explanation: ${explanation}
+
+Format your output in clean Markdown with clear paragraph structure.`,
+      config: {
+        systemInstruction: 'You are a master of psychology memory hooks and clinical teaching acronyms. Output a detailed reminder structure.'
+      }
+    });
+
+    return res.json({
+      mnemonic: response.text,
+      isFallback: false
+    });
+  } catch (err: any) {
+    console.error('Gemini mnemonic formulation error:', err.message || err);
+    return res.json({ isFallback: true });
+  }
+});
+
+app.post('/api/generate-deck', async (req, res) => {
   const { textPayload, fileContent, fileName, cardIndex, totalCards, customApiKey } = req.body;
   const ai = customApiKey && customApiKey.trim() !== ''
     ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } })
@@ -165,139 +223,6 @@ Return your response strictly in JSON matching the requested responseSchema. Opt
     return res.json({ isFallback: true, msg: err.message || 'Generation failed' });
   }
 });
-
-app.post('/api/generate-mnemonic', async (req, res) => {
-  const { vignette, explanation } = req.body;
-  const ai = getGemini();
-
-  if (!ai) {
-    return res.json({ isFallback: true });
-  }
-
-  try {
-    const response = await generateContentWithFallback(ai, {
-      contents: `Create an original, clever, high-yield clinical mnemonic, acronym, or cognitive memory cue to easily memorize the diagnostic criteria, psychopharmacological treatment, or subscale metrics related to this board review item:
-Vignette: ${vignette}
-Explanation: ${explanation}
-
-Format your output in clean Markdown with clear paragraph structure.`,
-      config: {
-        systemInstruction: 'You are a master of psychology memory hooks and clinical teaching acronyms. Output a detailed reminder structure.'
-      }
-    });
-
-    return res.json({
-      mnemonic: response.text,
-      isFallback: false
-    });
-  } catch (err: any) {
-    console.error('Gemini mnemonic formulation error:', err.message || err);
-    return res.json({ isFallback: true });
-  }
-});
-
-app.post('/api/generate-deck', async (req, res) => {
-  const { textPayload, fileContent, fileName, chunkIndex, totalChunks, customApiKey } = req.body;
-  const ai = customApiKey && customApiKey.trim() !== '' 
-      ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }) 
-      : getGemini();
-
-  if (!ai) {
-    return res.json({ 
-      isFallback: true, 
-      msg: 'No active Gemini key present. Please connect your developer key in Settings > Secrets.' 
-    });
-  }
-
-  try {
-    let referenceInput = '';
-    const MAX_CHAR_CAP = 15000; // Optimal limit to fit within Vercel Hobby's 10-second limit
-
-    let trimmedPayload = (textPayload || '').trim();
-    let trimmedFile = (fileContent || '').trim();
-
-    if (trimmedPayload.length > MAX_CHAR_CAP) {
-      trimmedPayload = trimmedPayload.substring(0, MAX_CHAR_CAP) + '\n...[Truncated for speed & serverless limits]...';
-    }
-    if (trimmedFile.length > MAX_CHAR_CAP) {
-      trimmedFile = trimmedFile.substring(0, MAX_CHAR_CAP) + '\n...[Truncated for speed & serverless limits]...';
-    }
-
-    if (trimmedPayload !== '') {
-      referenceInput += `\nPASTED NOTES/GUIDES:\n${trimmedPayload}\n`;
-    }
-    if (trimmedFile !== '') {
-      referenceInput += `\nUPLOADED FILE MATERIAL (${fileName || 'document'}):\n${trimmedFile}\n`;
-    }
-
-    if (referenceInput.trim() === '') {
-      return res.status(400).json({ error: 'Please provide either notes content or uploaded study files.' });
-    }
-
-    let progressContext = '';
-    if (chunkIndex && totalChunks) {
-      progressContext = `\nNote: You are currently processing section ${chunkIndex} of ${totalChunks} of the study material. Ensure your cards represent this section specifically.`;
-    }
-
-    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Your duty is to read the user's provided notes, study guides, or uploaded books, extract the most critical, high-yield concepts, terms, conditions, and theories, and convert them into strictly professional Multiple Choice Question (MCQ) board-exam type flashcards.
-CRITICAL: Do NOT generate identification or fill-in-the-blank questions. Every card MUST have exactly four multiple choice options.
-WHERE APPLICABLE, use realistic clinical case vignettes based on the notes as the question prompt to test applied clinical reasoning. ${progressContext}
-Format details:
-- Each card's 'front' must contain a professional, board-exam style clinical MCQ prompt or case vignette.
-- Provide exactly 4 multiple choice options inside the 'options' JSON array.
-- The 'correctOption' field MUST exactly match one of the options in the array.
-- Each card's 'back' must clearly state a concise, precise clinical explanation of why the correct option is right and the others are wrong (Rationale).
-- Each 'hint' is a small cognitive mnemonic or retrieval cue.
-
-Generate a highly optimized, high-yield deck of exactly 10 professional MCQ flashcards. Return your response strictly in JSON matching the requested responseSchema.`;
-
-    const response = await generateContentWithFallback(ai, {
-      contents: `Read all the following study references and formulate a comprehensive set of study flashcards covering every important note, definition, and concept: ${referenceInput}`,
-      config: {
-
-    let progressContext = '';
-    if (chunkIndex && totalChunks) {
-      progressContext = `You are processing section ${chunkIndex} of ${totalChunks}.`;
-    }
-
-    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Generate exactly 10 MCQ flashcards. For EACH card, immediately output a single JSON object (not an array) on one line. Output one card at a time as you generate it. Each JSON must have: id, front, back, hint, options (array of 4), correctOption. ${progressContext}`;
-
-    // Generate cards one at a time using streaming
-    for (let i = 1; i <= 10; i++) {
-      sendEvent({ status: 'generating', current: i, total: 10 });
-
-      const response = await generateContentWithFallback(ai, {
-        contents: `Generate flashcard #${i} of 10 from this material. Return ONLY a single JSON object for this one card:\n${referenceInput}`,
-        config: {
-          systemInstruction: sysInstruct,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            required: ['id', 'front', 'back', 'options', 'correctOption'],
-            properties: {
-              id: { type: Type.STRING },
-              front: { type: Type.STRING },
-              back: { type: Type.STRING },
-              hint: { type: Type.STRING },
-              options: { type: Type.ARRAY, items: { type: Type.STRING } },
-              correctOption: { type: Type.STRING }
-            }
-          }
-        }
-      });
-
-      const card = JSON.parse(response.text || '{}');
-      sendEvent({ card, current: i, total: 10 });
-    }
-
-    sendEvent({ done: true });
-    res.end();
-  } catch (err: any) {
-    console.error('Streaming deck error:', err.message || err);
-    sendEvent({ error: err.message || 'Generation failed' });
-    res.end();
-  }
-})
 
 app.post('/api/parse-document', async (req, res) => {
   const { base64, fileName, fileType } = req.body;
