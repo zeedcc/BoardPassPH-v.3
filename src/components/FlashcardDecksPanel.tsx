@@ -490,7 +490,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
               id: `card-chunk-${i}-${cardIdx}-${Date.now()}`,
               front: card.front,
               back: card.back,
-              hint: card.hint || ''
+              hint: card.hint || '',
+              options: card.options || [],
+              correctOption: card.correctOption || ''
             }));
             allCards.push(...mappedCards);
           } else {
@@ -527,12 +529,12 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     setNewDeckTitle('');
     setNewDeckDesc('');
     setNewDeckCategory('Abnormal Psychology');
-    setNewDeckCards([{ front: '', back: '', hint: '' }]);
+    setNewDeckCards([{ front: '', back: '', hint: '', options: ['', '', '', ''], correctOption: '' }]);
     setIsCreatingDeck(true);
   };
 
   const handleAddManualCardRow = () => {
-    setNewDeckCards([...newDeckCards, { front: '', back: '', hint: '' }]);
+    setNewDeckCards([...newDeckCards, { front: '', back: '', hint: '', options: ['', '', '', ''], correctOption: '' }]);
   };
 
   const handleRemoveManualCardRow = (idx: number) => {
@@ -552,7 +554,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         id: `card-${Date.now()}-${i}`,
         front: c.front.trim(),
         back: c.back.trim(),
-        hint: c.hint?.trim() || ''
+        hint: c.hint?.trim() || '',
+        options: c.options || [],
+        correctOption: c.correctOption || ''
       }));
 
     if (compiledCards.length === 0) {
@@ -2306,6 +2310,43 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                             className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium outline-none"
                           />
                         </div>
+
+                        {/* MCQ Options UI */}
+                        <div className="space-y-2 pt-2 border-t border-gray-100">
+                          <label className="text-[9px] uppercase font-black text-gray-400 block">Board MCQ Options & Correct Choice</label>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {(card.options || ['', '', '', '']).map((opt, oIdx) => (
+                              <div key={oIdx} className="flex items-center gap-2">
+                                <input 
+                                  type="radio" 
+                                  name={`correct-${idx}`}
+                                  checked={card.correctOption === opt && opt !== ''}
+                                  onChange={() => {
+                                    const updated = [...newDeckCards];
+                                    updated[idx].correctOption = opt;
+                                    setNewDeckCards(updated);
+                                  }}
+                                  className="accent-pine"
+                                />
+                                <input
+                                  type="text"
+                                  value={opt}
+                                  onChange={(e) => {
+                                    const updated = [...newDeckCards];
+                                    if (!updated[idx].options) updated[idx].options = ['', '', '', ''];
+                                    const wasCorrect = updated[idx].correctOption === updated[idx].options[oIdx];
+                                    updated[idx].options![oIdx] = e.target.value;
+                                    if (wasCorrect) updated[idx].correctOption = e.target.value;
+                                    setNewDeckCards(updated);
+                                  }}
+                                  placeholder={`Option ${String.fromCharCode(65 + oIdx)}`}
+                                  className="flex-grow bg-white border border-gray-200 rounded-lg px-2 py-1 text-[10px] outline-none"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-[8px] text-gray-400 italic mt-1">Select the radio button next to the correct answer.</p>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -2579,7 +2620,17 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                       <div key={card.id || idx} className="bg-[#fcfdfc] border border-gray-150 p-4 rounded-2xl shadow-xs">
                         <span className="text-[9px] font-mono uppercase bg-gray-100 text-gray-400 px-2 py-0.5 rounded-md">Card #{idx + 1}</span>
                         <p className="text-xs text-gray-800 font-bold leading-relaxed mt-2 whitespace-pre-wrap"><strong>Front:</strong><br />{card.front}</p>
-                        <p className="text-xs text-emerald-800 leading-relaxed mt-2.5 border-t border-gray-50 pt-2.5"><strong>Back answers:</strong> {card.back}</p>
+                        <p className="text-xs text-emerald-800 leading-relaxed mt-2.5 border-t border-gray-50 pt-2.5"><strong>Back Rationale:</strong> {card.back}</p>
+                        {card.options && card.options.length > 0 && (
+                          <div className="mt-3 space-y-1 bg-white p-2 rounded-xl border border-gray-100">
+                            <p className="text-[10px] font-black uppercase text-gray-400 mb-1">Board MCQ Options:</p>
+                            {card.options.map((opt, oIdx) => (
+                              <div key={oIdx} className={`text-[10px] px-2 py-1 rounded-md ${opt === card.correctOption ? 'bg-green-50 text-green-700 font-bold' : 'text-gray-500'}`}>
+                                {String.fromCharCode(65 + oIdx)}) {opt} {opt === card.correctOption && '✓'}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {card.hint && (
                           <p className="text-[10px] text-gray-400 italic mt-1.5">Hint: {card.hint}</p>
                         )}
