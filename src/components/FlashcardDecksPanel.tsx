@@ -6,7 +6,7 @@ import {
   ArrowLeft, Copy, Trophy, RefreshCw, ThumbsUp, MessageSquare, BookOpen, AlertCircle,
   Mic, MicOff, Volume2, CircleDot, Radio, Square, Zap, Key, Flame, Heart, ChevronDown
 } from 'lucide-react';
-import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { UserProfile, Flashcard, FlashcardDeck, GroupRecallRoom } from '../types';
 
@@ -211,6 +211,17 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const analyserRef = useRef<AnalyserNode | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const rafIdRef = useRef<number | null>(null);
+
+  // ── WebRTC live voice ──────────────────────────────────────────────────────
+  // peerConnections: keyed by remote participant's emailKey (dots replaced with _)
+  const peerConnectionsRef = useRef<Record<string, RTCPeerConnection>>({});
+  // remoteAudio elements: one per remote peer, kept alive in a ref so GC won't kill them
+  const remoteAudioElementsRef = useRef<Record<string, HTMLAudioElement>>({});
+  // Firestore unsubscribers for each peer's signaling sub-collection listener
+  const signalingUnsubsRef = useRef<Record<string, () => void>>({});
+  // Track which peers we have already initiated an offer toward
+  const offeredPeersRef = useRef<Set<string>>(new Set());
+  // ──────────────────────────────────────────────────────────────────────────
   
   // Load my-decks from localStorage or profile (prefer profile for cloud sync)
   useEffect(() => {
@@ -1538,7 +1549,229 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     }
   };
 
+  // ── WebRTC helpers ─────────────────────────────────────────────────────────
+
+  const STUN_CONFIG: RTCConfiguration = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+  };
+
+  /** Tear down a single peer connection and its Firestore signaling listener */
+  const closePeer = (emailKey: string) => {
+    if (signalingUnsubsRef.current[emailKey]) {
+      signalingUnsubsRef.current[emailKey]();
+      delete signalingUnsubsRef.current[emailKey];
+    }
+    if (peerConnectionsRef.current[emailKey]) {
+      peerConnectionsRef.current[emailKey].close();
+      delete peerConnectionsRef.current[emailKey];
+    }
+    if (remoteAudioElementsRef.current[emailKey]) {
+      remoteAudioElementsRef.current[emailKey].srcObject = null;
+      delete remoteAudioElementsRef.current[emailKey];
+    }
+    offeredPeersRef.current.delete(emailKey);
+  };
+
+  /** Tear down every active peer connection */
+  const closeAllPeers = () => {
+    Object.keys(peerConnectionsRef.current).forEach(closePeer);
+  };
+
+  /**
+   * Create (or return existing) RTCPeerConnection for a remote peer.
+   * localStream must already be set in micStreamRef.current.
+   */
+  const getOrCreatePeerConnection = (
+    remoteEmailKey: string,
+    roomId: string,
+    myEmailKey: string,
+  ): RTCPeerConnection => {
+    if (peerConnectionsRef.current[remoteEmailKey]) {
+      return peerConnectionsRef.current[remoteEmailKey];
+    }
+
+    const pc = new RTCPeerConnection(STUN_CONFIG);
+    peerConnectionsRef.current[remoteEmailKey] = pc;
+
+    // Add local audio tracks
+    if (micStreamRef.current) {
+      micStreamRef.current.getAudioTracks().forEach(track => {
+        pc.addTrack(track, micStreamRef.current!);
+      });
+    }
+
+    // When we get a remote audio track, attach it to an Audio element
+    pc.ontrack = (event) => {
+      const stream = event.streams[0];
+      if (!remoteAudioElementsRef.current[remoteEmailKey]) {
+        const audio = new Audio();
+        audio.autoplay = true;
+        audio.volume = 1.0;
+        remoteAudioElementsRef.current[remoteEmailKey] = audio;
+      }
+      remoteAudioElementsRef.current[remoteEmailKey].srcObject = stream;
+      remoteAudioElementsRef.current[remoteEmailKey].play().catch(() => {});
+    };
+
+    // Trickle ICE: write candidates to Firestore so the remote peer can consume them
+    pc.onicecandidate = async (event) => {
+      if (!event.candidate) return;
+      try {
+        const candRef = doc(
+          collection(db, 'liveRecallSessions', roomId, 'signaling',
+            `${myEmailKey}__to__${remoteEmailKey}`, 'candidates')
+        );
+        await setDoc(candRef, { candidate: event.candidate.toJSON(), ts: Date.now() });
+      } catch (e) {
+        console.warn('ICE candidate write failed:', e);
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
+        closePeer(remoteEmailKey);
+      }
+    };
+
+    return pc;
+  };
+
+  /**
+   * Listen for an offer/answer/ICE from a specific remote peer toward us.
+   * path: signaling/{remoteEmailKey}__to__{myEmailKey}
+   */
+  const listenForSignalingFromPeer = (
+    remoteEmailKey: string,
+    roomId: string,
+    myEmailKey: string,
+  ) => {
+    if (signalingUnsubsRef.current[remoteEmailKey]) return; // already listening
+
+    const sigDocPath = `liveRecallSessions/${roomId}/signaling/${remoteEmailKey}__to__${myEmailKey}`;
+    const sigDocRef = doc(db, sigDocPath);
+
+    const unsub = onSnapshot(sigDocRef, async (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+
+      const pc = getOrCreatePeerConnection(remoteEmailKey, roomId, myEmailKey);
+
+      // Handle offer
+      if (data.offer && pc.signalingState === 'stable' && !offeredPeersRef.current.has(`answer_sent_to_${remoteEmailKey}`)) {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          offeredPeersRef.current.add(`answer_sent_to_${remoteEmailKey}`);
+
+          // Write our answer to the reverse path
+          await setDoc(
+            doc(db, `liveRecallSessions/${roomId}/signaling/${myEmailKey}__to__${remoteEmailKey}`),
+            { answer: answer.toJSON(), ts: Date.now() },
+            { merge: true }
+          );
+        } catch (e) {
+          console.warn('Answer creation failed:', e);
+        }
+      }
+
+      // Handle answer to our offer
+      if (data.answer && pc.signalingState === 'have-local-offer') {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        } catch (e) {
+          console.warn('setRemoteDescription(answer) failed:', e);
+        }
+      }
+    });
+
+    signalingUnsubsRef.current[remoteEmailKey] = unsub;
+
+    // Also listen for incoming ICE candidates from this peer
+    const candColRef = collection(db, `liveRecallSessions/${roomId}/signaling/${remoteEmailKey}__to__${myEmailKey}/candidates`);
+    const candUnsub = onSnapshot(candColRef, async (colSnap) => {
+      const pc = peerConnectionsRef.current[remoteEmailKey];
+      if (!pc) return;
+      for (const change of colSnap.docChanges()) {
+        if (change.type === 'added') {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(change.doc.data().candidate));
+          } catch (e) {
+            console.warn('addIceCandidate failed:', e);
+          }
+        }
+      }
+    });
+
+    // Combine both unsubscribers
+    const prevUnsub = signalingUnsubsRef.current[remoteEmailKey];
+    signalingUnsubsRef.current[remoteEmailKey] = () => {
+      prevUnsub?.();
+      candUnsub();
+    };
+  };
+
+  /**
+   * Initiate an offer to a remote peer (caller side).
+   * Only called when myEmailKey < remoteEmailKey (lexicographic) to avoid double-offers.
+   */
+  const initiateOfferToPeer = async (
+    remoteEmailKey: string,
+    roomId: string,
+    myEmailKey: string,
+  ) => {
+    if (offeredPeersRef.current.has(remoteEmailKey)) return;
+    offeredPeersRef.current.add(remoteEmailKey);
+
+    const pc = getOrCreatePeerConnection(remoteEmailKey, roomId, myEmailKey);
+
+    try {
+      const offer = await pc.createOffer({ offerToReceiveAudio: true });
+      await pc.setLocalDescription(offer);
+
+      await setDoc(
+        doc(db, `liveRecallSessions/${roomId}/signaling/${myEmailKey}__to__${remoteEmailKey}`),
+        { offer: offer.toJSON(), ts: Date.now() },
+        { merge: true }
+      );
+
+      // Listen for the answer on the reverse path
+      listenForSignalingFromPeer(remoteEmailKey, roomId, myEmailKey);
+    } catch (e) {
+      console.warn('Offer creation failed:', e);
+      offeredPeersRef.current.delete(remoteEmailKey);
+    }
+  };
+
+  /**
+   * Connect to all other voice-lounge participants in the room.
+   * Uses a deterministic offer/answer split: lower emailKey sends the offer.
+   */
+  const connectToAllVoicePeers = (room: GroupRecallRoom, myEmailKey: string) => {
+    const otherKeys = Object.keys(room.participants).filter(
+      k => k !== myEmailKey && room.participants[k].voiceConnected && !k.startsWith('peer_')
+    );
+
+    otherKeys.forEach(remoteKey => {
+      if (myEmailKey < remoteKey) {
+        // I am the "caller" – send offer
+        initiateOfferToPeer(remoteKey, room.id, myEmailKey);
+      } else {
+        // I am the "callee" – just listen for an offer
+        listenForSignalingFromPeer(remoteKey, room.id, myEmailKey);
+      }
+    });
+  };
+
+  // ── End WebRTC helpers ─────────────────────────────────────────────────────
+
   const cleanupVoiceLoungeAndRecording = () => {
+    // Tear down all WebRTC peer connections first
+    closeAllPeers();
+
     // Stop recording if active
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try { mediaRecorderRef.current.stop(); } catch (e) {}
@@ -1612,6 +1845,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   };
 
   const handleConnectVoiceLounge = async () => {
+    if (!activeSessionRoom) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
@@ -1620,7 +1854,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       setIsVoiceMuted(false);
       isVoiceMutedRef.current = false;
 
-      // Set up analyzer for voice visualizations
+      // Set up analyser for volume visualisation (unchanged)
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioContextClass) {
         const ctx = new AudioContextClass();
@@ -1633,7 +1867,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
-
         let lastSpeakingVal = false;
         let lastSyncTime = 0;
 
@@ -1641,74 +1874,69 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
           if (!analyserRef.current || !micStreamRef.current) return;
           analyserRef.current.getByteFrequencyData(dataArray);
           let total = 0;
-          for (let i = 0; i < bufferLength; i++) {
-            total += dataArray[i];
-          }
+          for (let i = 0; i < bufferLength; i++) total += dataArray[i];
           const average = total / bufferLength;
-          const volumeScaled = Math.min(100, Math.round((average / 255) * 200)); 
+          const volumeScaled = Math.min(100, Math.round((average / 255) * 200));
           setLocalVoiceVolume(volumeScaled);
 
-          // Throttled Firestore speaking state sync
-          const isSpeaking = volumeScaled > 8; // Lowered from 15 for better mic sensitivity
-          
-          // VOX Auto-recording logic for Hands-free Voice Lounge
-          if (voiceLoungeConnectedRef.current && !isVoiceMutedRef.current && !isRecordingVoiceRef.current && isSpeaking && !isAutoRecordingRef.current) {
-            isAutoRecordingRef.current = true;
-            handleStartVoiceRecording();
-          } else if (isAutoRecordingRef.current && !isSpeaking) {
-            // Clear old VOX timeout if speaking resumes
-            if (voxTimerRef.current) clearTimeout(voxTimerRef.current);
-            // If quiet for 1.5s, stop and send
-            voxTimerRef.current = setTimeout(() => {
-              if (isAutoRecordingRef.current) {
-                isAutoRecordingRef.current = false;
-                handleStopVoiceRecording();
-              }
-            }, 1500);
-          } else if (isAutoRecordingRef.current && isSpeaking) {
-            // Reset quiet timer if speaking continues
-            if (voxTimerRef.current) {
-              clearTimeout(voxTimerRef.current);
-              voxTimerRef.current = null;
-            }
-          }
-
+          const isSpeaking = volumeScaled > 8;
           const now = Date.now();
           if (isSpeaking !== lastSpeakingVal && now - lastSyncTime > 400) {
             lastSpeakingVal = isSpeaking;
             lastSyncTime = now;
             syncVoiceStatusToFirestore(true, isVoiceMutedRef.current, isSpeaking);
           }
-
           rafIdRef.current = requestAnimationFrame(updateVolume);
         };
-
         rafIdRef.current = requestAnimationFrame(updateVolume);
       }
 
+      // Mark ourselves as voice-connected in Firestore
       await syncVoiceStatusToFirestore(true, false, false);
-      
-      // Post system chat message
+
+      // ── WebRTC: connect to every peer already in the lounge ───────────────
+      const myEmailKey = profile.email.replace(/\./g, '_');
+      connectToAllVoicePeers(activeSessionRoom, myEmailKey);
+      // ──────────────────────────────────────────────────────────────────────
+
       const myName = profile.username || profile.email.split('@')[0];
-      await updateDoc(doc(db, 'liveRecallSessions', activeSessionRoom!.id), {
+      await updateDoc(doc(db, 'liveRecallSessions', activeSessionRoom.id), {
         chatMessages: arrayUnion({
           id: `msg-${Date.now()}`,
           senderName: "Lobby Bot",
           senderEmail: "admin@boardpassph.com",
-          text: `🎙️ ${myName} joined the active voice lounge!`,
+          text: `🎙️ ${myName} joined the live voice lounge!`,
           timestamp: new Date().toLocaleTimeString()
         })
       });
     } catch (err) {
       console.error("Microphone activation failed:", err);
-      alert("🎙️ Microphone Access Required: Please allow microphone permissions to connect to the BP AirTime Voice Lounge.");
+      alert("🎙️ Microphone Access Required: Please allow microphone permissions to connect to the BP Voice Lounge.");
     }
   };
 
   const handleDisconnectVoiceLounge = async () => {
     if (!activeSessionRoom) return;
     const myName = profile.username || profile.email.split('@')[0];
-    
+    const myEmailKey = profile.email.replace(/\./g, '_');
+
+    // ── Close all WebRTC peer connections ─────────────────────────────────
+    closeAllPeers();
+
+    // Delete our outgoing signaling docs from Firestore so peers know we left
+    try {
+      const sigColRef = collection(db, 'liveRecallSessions', activeSessionRoom.id, 'signaling');
+      const sigSnap = await getDocs(sigColRef);
+      const batch = writeBatch(db);
+      sigSnap.docs.forEach(d => {
+        if (d.id.startsWith(`${myEmailKey}__to__`)) batch.delete(d.ref);
+      });
+      await batch.commit();
+    } catch (e) {
+      console.warn('Signaling cleanup failed:', e);
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     // Cleanup local state and stream
     if (micStreamRef.current) {
       micStreamRef.current.getTracks().forEach(track => track.stop());
@@ -1729,7 +1957,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     isVoiceMutedRef.current = false;
     setLocalVoiceVolume(0);
 
-    // Update Firestore
+    // Update Firestore presence
     await syncVoiceStatusToFirestore(false, false, false);
 
     try {
@@ -1915,6 +2143,34 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       }
     });
   }, [activeSessionRoom?.chatMessages, voiceLoungeConnected]);
+
+  // ── WebRTC: when a new peer joins the lounge while we are already connected,
+  //    initiate / accept a connection to them automatically ───────────────────
+  useEffect(() => {
+    if (!voiceLoungeConnected || !activeSessionRoom || !micStreamRef.current) return;
+    const myEmailKey = profile.email.replace(/\./g, '_');
+    const voicePeerKeys = Object.keys(activeSessionRoom.participants).filter(
+      k => k !== myEmailKey && activeSessionRoom.participants[k].voiceConnected && !k.startsWith('peer_')
+    );
+    voicePeerKeys.forEach(remoteKey => {
+      if (!peerConnectionsRef.current[remoteKey]) {
+        // New peer appeared — connect
+        if (myEmailKey < remoteKey) {
+          initiateOfferToPeer(remoteKey, activeSessionRoom.id, myEmailKey);
+        } else {
+          listenForSignalingFromPeer(remoteKey, activeSessionRoom.id, myEmailKey);
+        }
+      }
+    });
+    // Tear down connections for peers who left the lounge
+    Object.keys(peerConnectionsRef.current).forEach(remoteKey => {
+      if (!activeSessionRoom.participants[remoteKey]?.voiceConnected) {
+        closePeer(remoteKey);
+      }
+    });
+  }, [activeSessionRoom?.participants, voiceLoungeConnected]);
+  // ──────────────────────────────────────────────────────────────────────────
+
   const filteredPublicDecks = publicDecks.filter(deck => 
     deck.title.toLowerCase().includes(deckSearchQuery.toLowerCase()) || 
     deck.description.toLowerCase().includes(deckSearchQuery.toLowerCase()) ||
