@@ -166,6 +166,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [deckApiKey, setDeckApiKey] = useState(() => {
     return localStorage.getItem(`bp_gemini_api_key_${profile.email}`) || '';
   });
+  const [numCardsToGenerate, setNumCardsToGenerate] = useState<number>(20);
   
   // Public Decks pool
   const [publicDecks, setPublicDecks] = useState<FlashcardDeck[]>(SEED_PUBLIC_DECKS());
@@ -592,7 +593,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
   try {
     const fullText = `${rawNotes}\n${rawFileText}`.trim();
-    const TOTAL_CARDS = 10;
+    const TOTAL_CARDS = numCardsToGenerate;
     const allCards: Flashcard[] = [];
 
     for (let i = 1; i <= TOTAL_CARDS; i++) {
@@ -657,6 +658,54 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     setAiGenerationProgressText('');
   }
 };
+
+          if (data.card) {
+            const card = data.card;
+            allCards.push({
+              id: `card-chunk-${i}-${Date.now()}-${Math.random()}`,
+              front: card.front,
+              back: card.back,
+              hint: card.hint || '',
+              options: card.options || [],
+              correctOption: card.correctOption || ''
+            });
+          }
+
+          if (data.error) {
+            throw new Error(data.error);
+          }
+        } catch (parseErr) {
+          // skip malformed lines
+        }
+      }
+    }
+
+  } catch (err: any) {
+    console.warn(`Error generating chunk ${i + 1}:`, err);
+    throw new Error(`Failed on section ${i + 1}: ${err.message || err}`);
+  }
+      }
+
+      if (allCards.length > 0) {
+        setAiGenResult(allCards);
+        setAiDeckTitle(selectedFile ? `AI - ${selectedFile.name.split('.')[0]}` : `AI - Chapter Review ${new Date().toLocaleDateString()}`);
+
+        if (originalChunkLength > 10) {
+          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nExtracted first 10 core sections (${chunks.length * 6000} chars) to guarantee full learning depth and stability. Generated a master clinical deck of ${allCards.length} index cards!`);
+        } else if (chunks.length > 1) {
+          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nWe successfully processed ${chunks.length} distinct sections sequentially and structured a master deck of ${allCards.length} clinical cards. Happy learning!`);
+        }
+      } else {
+        alert("Failed to synthesize flashcards. Please double check that process.env.GEMINI_API_KEY is configured correctly in Settings > Secrets.");
+      }
+    } catch (err: any) {
+      console.warn("AI deck generation client error:", err);
+      alert(`AI deck generator failed.\n\nDetails: ${err.message || err}\n\nPlease check your internet connection or verify in Settings > Secrets if GEMINI_API_KEY is set.`);
+    } finally {
+      setIsGeneratingDeckAI(false);
+      setAiGenerationProgressText('');
+    }
+  };
 
   const handleCreateNewManualDeck = () => {
     setNewDeckTitle('');
@@ -2929,6 +2978,21 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                         </button>
                       </div>
                     )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider font-mono">
+                      Number of Cards to Generate
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={numCardsToGenerate}
+                      onChange={(e) => setNumCardsToGenerate(Math.max(1, parseInt(e.target.value) || 1))}
+                      disabled={isGeneratingDeckAI || isParsingFile}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-mono font-bold outline-none focus:border-pine focus:ring-1 focus:ring-pine/20 transition disabled:opacity-50"
+                    />
                   </div>
 
                   <button
