@@ -109,49 +109,60 @@ Format your questions strictly based on the requested focal subject area and dif
 
 Return your response strictly in JSON matching the requested responseSchema. Options must always be exactly a 4-item array.`;
 
+    app.post('/api/generate-deck', async (req, res) => {
+  const { textPayload, fileContent, fileName, cardIndex, totalCards, customApiKey } = req.body;
+  const ai = customApiKey && customApiKey.trim() !== ''
+    ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } })
+    : getGemini();
+
+  if (!ai) {
+    return res.json({ isFallback: true, msg: 'No active Gemini key present.' });
+  }
+
+  try {
+    const MAX_CHAR_CAP = 15000;
+    let trimmedPayload = (textPayload || '').trim();
+    let trimmedFile = (fileContent || '').trim();
+
+    if (trimmedPayload.length > MAX_CHAR_CAP) trimmedPayload = trimmedPayload.substring(0, MAX_CHAR_CAP);
+    if (trimmedFile.length > MAX_CHAR_CAP) trimmedFile = trimmedFile.substring(0, MAX_CHAR_CAP);
+
+    let referenceInput = '';
+    if (trimmedPayload) referenceInput += `\nPASTED NOTES:\n${trimmedPayload}\n`;
+    if (trimmedFile) referenceInput += `\nUPLOADED FILE (${fileName || 'document'}):\n${trimmedFile}\n`;
+
+    if (!referenceInput.trim()) {
+      return res.status(400).json({ error: 'No content provided.' });
+    }
+
+    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Generate exactly ONE MCQ flashcard from the provided material. This is card ${cardIndex} of ${totalCards}. Make it unique and different from what card numbers before it would have covered. Return a single JSON object with: id, front (clinical MCQ prompt), back (explanation/rationale), hint, options (array of exactly 4), correctOption (must match one of the options exactly).`;
+
     const response = await generateContentWithFallback(ai, {
-      contents: `Formulate a simulated board exam question focusing on "${focusArea || 'any DSM-5 chapter'}" with difficulty level "${difficulty || 'random'}".${historyInput}${contextInput}`,
+      contents: `Generate flashcard #${cardIndex} of ${totalCards} from this material:\n${referenceInput}`,
       config: {
         systemInstruction: sysInstruct,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
-          required: ['category', 'vignette', 'options', 'correctIndex', 'explanation'],
+          required: ['id', 'front', 'back', 'options', 'correctOption'],
           properties: {
-            category: {
-              type: Type.STRING,
-              description: 'The specific board topic category (e.g. DSM-5 Bipolar Disorders, Tests & Assessments, I/O HRM, Lifespan Stages)'
-            },
-            vignette: {
-              type: Type.STRING,
-              description: 'A realistic scenario or vignette representing a clinical psychiatric consultation, test suite briefing, or industrial work dispute.'
-            },
-            options: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: 'Exactly four plausible multiple choice answers representing clinical options.'
-            },
-            correctIndex: {
-              type: Type.INTEGER,
-              description: 'The zero-based index of the correct option (0 to 3)'
-            },
-            explanation: {
-              type: Type.STRING,
-              description: 'Extensive rationale detailing diagnostic criteria confirmations, subscore evaluations, pharmacology targets, and differential rule-outs.'
-            }
+            id: { type: Type.STRING },
+            front: { type: Type.STRING },
+            back: { type: Type.STRING },
+            hint: { type: Type.STRING },
+            options: { type: Type.ARRAY, items: { type: Type.STRING } },
+            correctOption: { type: Type.STRING }
           }
         }
       }
     });
 
-    const parsedJson = JSON.parse(response.text || '{}');
-    return res.json({
-      ...parsedJson,
-      isFallback: false
-    });
+    const card = JSON.parse(response.text || '{}');
+    return res.json({ card, isFallback: false });
+
   } catch (err: any) {
-    console.error('Gemini question formulation error:', err.message || err);
-    return res.json({ isFallback: true, msg: err.message || 'API failed' });
+    console.error('Card generation error:', err.message || err);
+    return res.json({ isFallback: true, msg: err.message || 'Generation failed' });
   }
 });
 
@@ -243,42 +254,6 @@ Generate a highly optimized, high-yield deck of exactly 10 professional MCQ flas
     const response = await generateContentWithFallback(ai, {
       contents: `Read all the following study references and formulate a comprehensive set of study flashcards covering every important note, definition, and concept: ${referenceInput}`,
       config: {
-app.post('/api/generate-deck', async (req, res) => {
-  const { textPayload, fileContent, fileName, chunkIndex, totalChunks, customApiKey } = req.body;
-  const ai = customApiKey && customApiKey.trim() !== ''
-    ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } })
-    : getGemini();
-
-  if (!ai) {
-    return res.json({ isFallback: true, msg: 'No active Gemini key present.' });
-  }
-
-  // Set SSE headers for streaming
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  const sendEvent = (data: object) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
-  };
-
-  try {
-    const MAX_CHAR_CAP = 15000;
-    let trimmedPayload = (textPayload || '').trim();
-    let trimmedFile = (fileContent || '').trim();
-
-    if (trimmedPayload.length > MAX_CHAR_CAP) trimmedPayload = trimmedPayload.substring(0, MAX_CHAR_CAP);
-    if (trimmedFile.length > MAX_CHAR_CAP) trimmedFile = trimmedFile.substring(0, MAX_CHAR_CAP);
-
-    let referenceInput = '';
-    if (trimmedPayload) referenceInput += `\nPASTED NOTES:\n${trimmedPayload}\n`;
-    if (trimmedFile) referenceInput += `\nUPLOADED FILE (${fileName || 'document'}):\n${trimmedFile}\n`;
-
-    if (!referenceInput.trim()) {
-      sendEvent({ error: 'Please provide notes or a file.' });
-      return res.end();
-    }
 
     let progressContext = '';
     if (chunkIndex && totalChunks) {
