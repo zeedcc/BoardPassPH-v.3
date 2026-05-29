@@ -261,18 +261,25 @@ export default function App() {
   };
 
   const handleManualCloudSync = async () => {
-    if (!profile) return;
+    if (!profile) {
+      alert("⚠️ You need to have an active profile to sync session data. Please register or sign in first!");
+      return;
+    }
     setSyncStatus('syncing');
     try {
       const syncEmail = profile.email.trim().toLowerCase();
+      if (!syncEmail) {
+        throw new Error("Profile email is missing.");
+      }
       const docRef = doc(db, 'profiles', syncEmail);
       await setDoc(docRef, profile);
       await new Promise(resolve => setTimeout(resolve, 650));
       setSyncStatus('synced');
       alert("✅ Review session data safely backed up to Google Cloud Firestore. Your progress, flashcards, and notes are now synchronized across all your devices!");
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Manual cloud sync failed:", err);
       setSyncStatus('synced');
+      alert(`❌ Manual cloud sync failed: ${err?.message || String(err) || 'Unknown connection error'}. Make sure you are signed in and Firestore rules are deployed.`);
     }
   };
 
