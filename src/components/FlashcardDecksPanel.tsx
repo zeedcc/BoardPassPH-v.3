@@ -185,6 +185,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const voiceTimerRef = useRef<any>(null);
+  const playedVoiceNoteIds = useRef<Set<string>>(new Set());
+  const voxTimerRef = useRef<any>(null);
+  const isAutoRecordingRef = useRef(false);
 
   // Live Voice Lounge Connection
   const [voiceLoungeConnected, setVoiceLoungeConnected] = useState(false);
@@ -218,12 +221,18 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       setSessionRoomLoading(true);
       
       const autoJoinSharedRoom = async () => {
+        let code = pendingClassroomRoom.trim().toLowerCase();
+        // Normalize room code: if it's 6 digits, add the 'room-' prefix
+        if (/^\d{6}$/.test(code)) {
+          code = `room-${code}`;
+        }
+
         try {
-          const docRef = doc(db, 'liveRecallSessions', pendingClassroomRoom);
+          const docRef = doc(db, 'liveRecallSessions', code);
           const docSnap = await getDoc(docRef);
 
           if (!docSnap.exists()) {
-            alert("Active Recall lobby not found or expired. Check room code.");
+            alert("The shared Recall lobby was not found. It may have expired or been deleted.");
             setSessionRoomLoading(false);
             return;
           }
@@ -253,7 +262,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
             })
           });
 
-          subscribeToLiveRecallSession(pendingClassroomRoom);
+          subscribeToLiveRecallSession(code);
         } catch (err) {
           console.error("Auto room joining failed:", err);
         } finally {
@@ -935,19 +944,25 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   };
 
   const handleJoinLiveSessionByInput = async () => {
-    if (!joinRoomIdInput.trim()) {
+    const rawCode = joinRoomIdInput.trim();
+    if (!rawCode) {
       alert("Please enter a valid lobby code");
       return;
     }
     setSessionRoomLoading(true);
-    const code = joinRoomIdInput.trim();
+    
+    // Normalize room code: if it's 6 digits, add the 'room-' prefix
+    let code = rawCode.toLowerCase();
+    if (/^\d{6}$/.test(code)) {
+      code = `room-${code}`;
+    }
 
     try {
       const docRef = doc(db, 'liveRecallSessions', code);
       const docSnap = await getDoc(docRef);
 
       if (!docSnap.exists()) {
-        alert("Active Recall lobby not found or expired. Check room code.");
+        alert("Active Recall lobby not found. Double check your code (e.g. room-123456).");
         setSessionRoomLoading(false);
         return;
       }
@@ -1337,17 +1352,33 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     if (!activeSessionRoom) return;
     if (newIdx < 0 || newIdx >= activeSessionRoom.cards.length) return;
 
-    const expiresAt = new Date();
-    expiresAt.setSeconds(expiresAt.getSeconds() + (activeSessionRoom.timerDuration || 60));
-
     try {
       const docRef = doc(db, 'liveRecallSessions', activeSessionRoom.id);
-      await updateDoc(docRef, { 
-        currentCardIndex: newIdx,
-        timerExpiresAt: expiresAt.toISOString(),
-        status: 'active' // Ensure it resets to active if it was reveal
-      });
-      setMyWrittenAnswer('');
+      const freshSnap = await getDoc(docRef);
+      if (freshSnap.exists()) {
+        const currentRoom = freshSnap.data() as GroupRecallRoom;
+        
+        const updatedParticipants = { ...currentRoom.participants };
+        Object.keys(updatedParticipants).forEach(key => {
+          updatedParticipants[key] = {
+            ...updatedParticipants[key],
+            submittedAnswer: false,
+            lastAnswerText: '',
+            selfRating: null
+          };
+        });
+
+        const expiresAt = new Date();
+        expiresAt.setSeconds(expiresAt.getSeconds() + (activeSessionRoom.timerDuration || 60));
+
+        await updateDoc(docRef, { 
+          currentCardIndex: newIdx,
+          timerExpiresAt: expiresAt.toISOString(),
+          status: 'active',
+          participants: updatedParticipants
+        });
+        setMyWrittenAnswer('');
+      }
     } catch (err) {
       console.warn("Index update failure:", err);
     }
@@ -1388,8 +1419,12 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         // Reset sub flags for all participants for the next card
         const updatedParticipants = { ...currentRoom.participants };
         Object.keys(updatedParticipants).forEach(key => {
-          updatedParticipants[key].submittedAnswer = false;
-          updatedParticipants[key].selfRating = null;
+          updatedParticipants[key] = {
+            ...updatedParticipants[key],
+            submittedAnswer: false,
+            lastAnswerText: '',
+            selfRating: null
+          };
         });
 
         const expiresAt = new Date();
@@ -1556,6 +1591,29 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
           // Throttled Firestore speaking state sync
           const isSpeaking = volumeScaled > 15;
+          
+          // VOX Auto-recording logic for Hands-free Voice Lounge
+          if (voiceLoungeConnected && !isVoiceMuted && !isRecordingVoice && isSpeaking && !isAutoRecordingRef.current) {
+            isAutoRecordingRef.current = true;
+            handleStartVoiceRecording();
+          } else if (isAutoRecordingRef.current && !isSpeaking) {
+            // Clear old VOX timeout if speaking resumes
+            if (voxTimerRef.current) clearTimeout(voxTimerRef.current);
+            // If quiet for 1.5s, stop and send
+            voxTimerRef.current = setTimeout(() => {
+              if (isAutoRecordingRef.current) {
+                isAutoRecordingRef.current = false;
+                handleStopVoiceRecording();
+              }
+            }, 1500);
+          } else if (isAutoRecordingRef.current && isSpeaking) {
+            // Reset quiet timer if speaking continues
+            if (voxTimerRef.current) {
+              clearTimeout(voxTimerRef.current);
+              voxTimerRef.current = null;
+            }
+          }
+
           const now = Date.now();
           if (isSpeaking !== lastSpeakingVal && now - lastSyncTime > 400) {
             lastSpeakingVal = isSpeaking;
@@ -1718,6 +1776,12 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const recordingSecondsRef = useRef(0);
 
   const handleStopVoiceRecording = () => {
+    isAutoRecordingRef.current = false;
+    if (voxTimerRef.current) {
+      clearTimeout(voxTimerRef.current);
+      voxTimerRef.current = null;
+    }
+
     if (voiceTimerRef.current) {
       clearInterval(voiceTimerRef.current);
       voiceTimerRef.current = null;
@@ -1737,7 +1801,29 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     }
   };
 
-  // Filter public decks
+  // Auto-play incoming voice notes if in voice lounge
+  useEffect(() => {
+    if (!voiceLoungeConnected || !activeSessionRoom) return;
+
+    activeSessionRoom.chatMessages.forEach(msg => {
+      if (msg.audioUrl && msg.senderEmail !== profile.email && !playedVoiceNoteIds.current.has(msg.id)) {
+        playedVoiceNoteIds.current.add(msg.id);
+        
+        // Auto-play the audio
+        try {
+          const audio = new Audio(msg.audioUrl);
+          audio.volume = 1.0;
+          
+          // Browser policy check: only play if user has interacted which they have if connected to lounge
+          audio.play().catch(err => {
+            console.warn("Auto-play blocked by browser. User needs to interact with page first.", err);
+          });
+        } catch (e) {
+          console.error("Audio auto-play failed:", e);
+        }
+      }
+    });
+  }, [activeSessionRoom?.chatMessages, voiceLoungeConnected]);
   const filteredPublicDecks = publicDecks.filter(deck => 
     deck.title.toLowerCase().includes(deckSearchQuery.toLowerCase()) || 
     deck.description.toLowerCase().includes(deckSearchQuery.toLowerCase()) ||
@@ -2382,14 +2468,14 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                   <div className="flex-grow bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-rose-700 flex items-center justify-between animate-pulse">
                     <span className="flex items-center gap-1.5 select-none text-[10px] uppercase font-bold tracking-wide">
                       <span className="h-2.5 w-2.5 rounded-full bg-rose-600 animate-ping shrink-0" />
-                      REC VOICE NOTE: {recordingSeconds}s
+                      {isAutoRecordingRef.current ? "BP AirTime: Live Broadcasting" : "REC VOICE NOTE"}: {recordingSeconds}s
                     </span>
                     <button
                       type="button"
                       onClick={handleStopVoiceRecording}
                       className="text-[9px] uppercase font-black text-rose-900 bg-rose-100 hover:bg-rose-200 border border-rose-300 px-2 py-1 rounded-lg cursor-pointer"
                     >
-                      Stop & Send
+                      {isAutoRecordingRef.current ? "Stop Mic" : "Stop & Send"}
                     </button>
                   </div>
                 ) : (
