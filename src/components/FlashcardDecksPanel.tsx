@@ -461,44 +461,45 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
       const allCards: Flashcard[] = [];
       
-      setAiGenerationProgressText(`Synthesizing ${chunks.length} section(s) in parallel...`);
-      
-      const promises = chunks.map(async (chunk, i) => {
-        const res = await fetch('/api/generate-deck', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            textPayload: chunk,
-            fileContent: '',
-            fileName: selectedFile?.name || 'Uploaded Notes',
-            chunkIndex: i + 1,
-            totalChunks: chunks.length,
-            customApiKey: deckApiKey
-          })
-        });
+      for (let i = 0; i < chunks.length; i++) {
+        setAiGenerationProgressText(`Synthesizing section ${i + 1} of ${chunks.length}...`);
+        const chunk = chunks[i];
+        
+        try {
+          const res = await fetch('/api/generate-deck', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              textPayload: chunk,
+              fileContent: '',
+              fileName: selectedFile?.name || 'Uploaded Notes',
+              chunkIndex: i + 1,
+              totalChunks: chunks.length,
+              customApiKey: deckApiKey
+            })
+          });
 
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(`Server returned status ${res.status}: ${errorText.substring(0, 200)}`);
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`Server returned status ${res.status}: ${errorText.substring(0, 200)}`);
+          }
+
+          const data = await res.json();
+          if (data && data.cards && data.cards.length > 0) {
+            const mappedCards = data.cards.map((card: any, cardIdx: number) => ({
+              id: `card-chunk-${i}-${cardIdx}-${Date.now()}`,
+              front: card.front,
+              back: card.back,
+              hint: card.hint || ''
+            }));
+            allCards.push(...mappedCards);
+          } else {
+            throw new Error(data.msg || "Invalid response format returned by artificial intelligence engine.");
+          }
+        } catch (err: any) {
+          console.warn(`Error generating chunk ${i + 1}:`, err);
+          throw new Error(`Failed on section ${i + 1}: ${err.message || err.toString()}`);
         }
-
-        const data = await res.json();
-        if (data && data.cards && data.cards.length > 0) {
-          // Re-map IDs to prevent key collisions across chunks
-          return data.cards.map((card: any, cardIdx: number) => ({
-            id: `card-chunk-${i}-${cardIdx}-${Date.now()}`,
-            front: card.front,
-            back: card.back,
-            hint: card.hint || ''
-          }));
-        } else {
-          throw new Error(data.msg || "Invalid response format returned by artificial intelligence engine.");
-        }
-      });
-
-      const results = await Promise.all(promises);
-      for (const cardList of results) {
-        allCards.push(...cardList);
       }
 
       if (allCards.length > 0) {
@@ -508,7 +509,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         if (originalChunkLength > 10) {
           alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nExtracted first 10 core sections (${chunks.length * 12000} chars) to guarantee full learning depth and stability. Generated a master clinical deck of ${allCards.length} index cards!`);
         } else if (chunks.length > 1) {
-          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nWe successfully processed ${chunks.length} distinct sections of your document in parallel and structured a master deck of ${allCards.length} clinical cards. Happy learning!`);
+          alert(`✨ Comprehensive Active Recall Deck generated successfully!\n\nWe successfully processed ${chunks.length} distinct sections sequentially and structured a master deck of ${allCards.length} clinical cards. Happy learning!`);
         }
       } else {
         alert("Failed to synthesize flashcards. Please double check that process.env.GEMINI_API_KEY is configured correctly in Settings > Secrets.");
