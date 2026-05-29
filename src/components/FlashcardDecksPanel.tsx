@@ -607,46 +607,72 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       const allCards: Flashcard[] = [];
       
       for (let i = 0; i < chunks.length; i++) {
-        setAiGenerationProgressText(`Synthesizing section ${i + 1} of ${chunks.length}...`);
-        const chunk = chunks[i];
-        
-        try {
-          const res = await fetch('/api/generate-deck', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              textPayload: chunk,
-              fileContent: '',
-              fileName: selectedFile?.name || 'Uploaded Notes',
-              chunkIndex: i + 1,
-              totalChunks: chunks.length,
-              customApiKey: deckApiKey
-            })
-          });
+  const chunk = chunks[i];
 
-          if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(`Server returned status ${res.status}: ${errorText.substring(0, 200)}`);
+  try {
+    const res = await fetch('/api/generate-deck', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        textPayload: chunk,
+        fileContent: '',
+        fileName: selectedFile?.name || 'Uploaded Notes',
+        chunkIndex: i + 1,
+        totalChunks: chunks.length,
+        customApiKey: deckApiKey
+      })
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`Server returned status ${res.status}: ${errorText}`);
+    }
+
+    // Read SSE stream
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const lines = decoder.decode(value).split('\n');
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.replace('data: ', ''));
+
+          if (data.status === 'generating') {
+            setAiGenerationProgressText(
+              `Synthesizing section ${i + 1} of ${chunks.length} — card ${data.current} of ${data.total}...`
+            );
           }
 
-          const data = await res.json();
-          if (data && data.cards && data.cards.length > 0) {
-            const mappedCards = data.cards.map((card: any, cardIdx: number) => ({
-              id: `card-chunk-${i}-${cardIdx}-${Date.now()}`,
+          if (data.card) {
+            const card = data.card;
+            allCards.push({
+              id: `card-chunk-${i}-${Date.now()}-${Math.random()}`,
               front: card.front,
               back: card.back,
               hint: card.hint || '',
               options: card.options || [],
               correctOption: card.correctOption || ''
-            }));
-            allCards.push(...mappedCards);
-          } else {
-            throw new Error(data.msg || "Invalid response format returned by artificial intelligence engine.");
+            });
           }
-        } catch (err: any) {
-          console.warn(`Error generating chunk ${i + 1}:`, err);
-          throw new Error(`Failed on section ${i + 1}: ${err.message || err.toString()}`);
+
+          if (data.error) {
+            throw new Error(data.error);
+          }
+        } catch (parseErr) {
+          // skip malformed lines
         }
+      }
+    }
+
+  } catch (err: any) {
+    console.warn(`Error generating chunk ${i + 1}:`, err);
+    throw new Error(`Failed on section ${i + 1}: ${err.message || err}`);
+  }
       }
 
       if (allCards.length > 0) {
