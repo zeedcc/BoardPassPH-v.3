@@ -4,7 +4,7 @@ import {
   Layers, Plus, Search, Share2, Play, Send, Upload, Sparkles, 
   Smile, Check, X, ChevronLeft, ChevronRight, Info, Users, Globe, Lock, 
   ArrowLeft, Copy, Trophy, RefreshCw, ThumbsUp, MessageSquare, BookOpen, AlertCircle,
-  Mic, MicOff, Volume2, CircleDot, Radio, Square, Zap, Key
+  Mic, MicOff, Volume2, CircleDot, Radio, Square, Zap, Key, Flame, Heart, ChevronDown
 } from 'lucide-react';
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -22,10 +22,119 @@ const VIRTUAL_PEERS = [
   { name: "Ethics Bot", avatar: "🤖", speed: 6500, color: "text-amber-500 bg-amber-50 border-amber-200" }
 ];
 
+const FlashcardDeckItem: React.FC<{ 
+  deck: FlashcardDeck; 
+  onEdit: (d: FlashcardDeck) => void;
+  onDelete: (id: string) => void;
+  onAddSubdeck: (parentId: string) => void;
+  onLaunchSolo: (d: FlashcardDeck) => void;
+  onLaunchLive: (d: FlashcardDeck) => void;
+  onShare: (d: FlashcardDeck) => void;
+  isSubdeck?: boolean;
+}> = ({ deck, onEdit, onDelete, onAddSubdeck, onLaunchSolo, onLaunchLive, onShare, isSubdeck }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className={`bg-white border ${isSubdeck ? 'border-gray-100 ml-4' : 'border-gray-200'} rounded-3xl p-5 shadow-sm space-y-4 flex flex-col justify-between`}>
+      <div className="space-y-2">
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] uppercase font-extrabold text-[#11321e] bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-full select-none">
+            {deck.category || "General Psychology"}
+          </span>
+          <span className="text-[10px] font-mono font-bold text-gray-400">
+            {deck.cards.length} Active Cards
+          </span>
+        </div>
+        <h4 className="font-display text-lg px-0.5 font-bold leading-tight text-pine flex items-center gap-2">
+          {deck.subdecks && deck.subdecks.length > 0 && (
+            <button onClick={() => setIsExpanded(!isExpanded)} className="text-gray-400 hover:text-pine cursor-pointer">
+              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </button>
+          )}
+          {deck.title}
+        </h4>
+        <p className="text-xs text-gray-500 line-clamp-2 px-0.5">
+          {deck.description}
+        </p>
+      </div>
+
+      <div className="pt-3 border-t border-gray-100 flex gap-2 flex-wrap">
+        <button
+          onClick={() => onLaunchLive(deck)}
+          className="px-3 py-1.5 bg-pine hover:bg-pine-mid text-cream text-[10px] font-black uppercase tracking-wider rounded-lg flex items-center gap-1 cursor-pointer"
+          title="Host Arena"
+        >
+          <Users className="w-3 h-3 text-mint" />
+          Arena
+        </button>
+        
+        <button
+          onClick={() => onLaunchSolo(deck)}
+          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-cream text-[10px] font-black uppercase tracking-wider rounded-lg flex items-center gap-1 cursor-pointer"
+          title="Solo Play"
+        >
+          <Play className="w-3 h-3" />
+          Solo
+        </button>
+
+        {!deck.isPublic && (
+          <button
+            onClick={() => onShare(deck)}
+            className="px-3 py-1.5 border border-emerald-200 text-emerald-800 hover:bg-emerald-50 text-[10px] font-black uppercase tracking-wider rounded-lg flex items-center gap-1 cursor-pointer"
+            title="Public"
+          >
+            <Globe className="w-3 h-3" />
+            Public
+          </button>
+        )}
+
+        <button
+          onClick={() => onEdit(deck)}
+          className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[10px] font-bold uppercase rounded-lg cursor-pointer"
+        >
+          Edit
+        </button>
+
+        <button
+          onClick={() => onAddSubdeck(deck.id)}
+          className="px-3 py-1.5 bg-pine/10 text-pine hover:bg-pine/20 text-[10px] font-bold uppercase rounded-lg cursor-pointer"
+        >
+          + Sub
+        </button>
+
+        <button
+          onClick={() => onDelete(deck.id)}
+          className="px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 text-[10px] font-bold uppercase rounded-lg cursor-pointer ml-auto"
+        >
+          Delete
+        </button>
+      </div>
+
+      {isExpanded && deck.subdecks && deck.subdecks.length > 0 && (
+        <div className="pt-2 space-y-4 border-l-2 border-pine/10 pl-2">
+          {deck.subdecks.map(sub => (
+            <FlashcardDeckItem 
+              key={sub.id} 
+              deck={sub} 
+              onEdit={onEdit} 
+              onDelete={onDelete} 
+              onAddSubdeck={onAddSubdeck}
+              onLaunchSolo={onLaunchSolo}
+              onLaunchLive={onLaunchLive}
+              onShare={onShare}
+              isSubdeck
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Pre-seeded local decks based on PmLE curriculum
 const SAMPLE_DECKS: FlashcardDeck[] = [];
 
-const BOARD_ITEM_TIMER_DURATION = 60; // Standard board exam time per item
+const BOARD_ITEM_TIMER_DURATION = 20; // 20s per board item as requested
 
 export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profile, setProfile }) => {
   const [activeSubTab, setActiveSubTab] = useState<'my-decks' | 'ai-generator' | 'public-decks' | 'live-recall'>('my-decks');
@@ -37,6 +146,8 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [newDeckCategory, setNewDeckCategory] = useState('Abnormal Psychology');
   const [newDeckCards, setNewDeckCards] = useState<Omit<Flashcard, 'id'>[]>([{ front: '', back: '', hint: '' }]);
   const [isCreatingDeck, setIsCreatingDeck] = useState(false);
+  const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
+  const [parentDeckIdForSubdeck, setParentDeckIdForSubdeck] = useState<string | null>(null);
   
   // AI Generator state
   const [pastedNotes, setPastedNotes] = useState('');
@@ -64,7 +175,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [roomLobbyMode, setRoomLobbyMode] = useState<'multiplayer' | 'solo'>('multiplayer');
   const [myWrittenAnswer, setMyWrittenAnswer] = useState('');
   const [playersDoneSubmitting, setPlayersDoneSubmitting] = useState(false);
-  const [selectedSelfRating, setSelectedSelfRating] = useState<'perfect' | 'vague' | 'forgot' | null>(null);
   const [isSoloMode, setIsSoloMode] = useState(false);
   const [activeRoomMessageInput, setActiveRoomMessageInput] = useState('');
   const [sessionRoomLoading, setSessionRoomLoading] = useState(false);
@@ -546,7 +656,18 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     setNewDeckCards(newDeckCards.filter((_, i) => i !== idx));
   };
 
-  const handleSaveManualDeck = () => {
+  const findDeckRecursive = (decks: FlashcardDeck[], targetId: string): FlashcardDeck | undefined => {
+    for (const d of decks) {
+      if (d.id === targetId) return d;
+      if (d.subdecks) {
+        const found = findDeckRecursive(d.subdecks, targetId);
+        if (found) return found;
+      }
+    }
+    return undefined;
+  };
+
+  const handleSaveManualDeck = async () => {
     if (!newDeckTitle.trim()) {
       alert("Title is required!");
       return;
@@ -555,7 +676,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     const compiledCards: Flashcard[] = newDeckCards
       .filter(c => c.front.trim() && c.back.trim())
       .map((c, i) => ({
-        id: `card-${Date.now()}-${i}`,
+        id: (c as any).id || `card-${Date.now()}-${i}`,
         front: c.front.trim(),
         back: c.back.trim(),
         hint: c.hint?.trim() || '',
@@ -568,23 +689,98 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       return;
     }
 
-    const deckId = `deck-${Date.now()}`;
-    const newDeck: FlashcardDeck = {
-      id: deckId,
-      title: newDeckTitle.trim(),
-      description: newDeckDesc.trim() || 'Custom study cards',
-      creatorEmail: profile.email,
-      creatorName: profile.username || profile.email.split('@')[0],
-      cards: compiledCards,
-      isPublic: false,
-      category: newDeckCategory,
-      createdAt: new Date().toISOString()
-    };
+    let updated: FlashcardDeck[];
 
-    const updated = [newDeck, ...myCustomDecks];
+    if (editingDeckId) {
+      const existingDeck = findDeckRecursive(myCustomDecks, editingDeckId);
+      if (!existingDeck) return;
+
+      const updatedDeck: FlashcardDeck = {
+        ...existingDeck,
+        title: newDeckTitle.trim(),
+        description: newDeckDesc.trim(),
+        category: newDeckCategory,
+        cards: compiledCards
+      };
+
+      // Auto-sync to public directory if already published
+      if (updatedDeck.isPublic) {
+        try {
+          await setDoc(doc(db, 'flashcardDecks', updatedDeck.id), updatedDeck);
+        } catch (e) {
+          console.warn("Public directory sync failed:", e);
+        }
+      }
+
+      updated = findAndReplaceDeck(myCustomDecks, editingDeckId, updatedDeck);
+    } else {
+      const deckId = `deck-${Date.now()}`;
+      const newDeck: FlashcardDeck = {
+        id: deckId,
+        title: newDeckTitle.trim(),
+        description: newDeckDesc.trim() || 'Custom study cards',
+        creatorEmail: profile.email,
+        creatorName: profile.username || profile.email.split('@')[0],
+        cards: compiledCards,
+        isPublic: false,
+        category: newDeckCategory,
+        createdAt: new Date().toISOString()
+      };
+
+      if (parentDeckIdForSubdeck) {
+        updated = findAndAddSubdeck(myCustomDecks, parentDeckIdForSubdeck, newDeck);
+      } else {
+        updated = [newDeck, ...myCustomDecks];
+      }
+    }
+
     saveDecksLocally(updated);
     setIsCreatingDeck(false);
-    alert("🎉 Flashcard Deck Created Successfully! Find it in the My Decks tab.");
+    setEditingDeckId(null);
+    setParentDeckIdForSubdeck(null);
+    alert(editingDeckId ? "🎉 Flashcard Deck Updated Successfully!" : "🎉 Flashcard Deck Created Successfully! Find it in the My Decks tab.");
+  };
+
+  const handleStartEditingDeck = (deck: FlashcardDeck) => {
+    setNewDeckTitle(deck.title);
+    setNewDeckDesc(deck.description);
+    setNewDeckCategory(deck.category || 'Abnormal Psychology');
+    setNewDeckCards(deck.cards.map(c => ({
+      front: c.front,
+      back: c.back,
+      hint: c.hint || '',
+      options: c.options || ['', '', '', ''],
+      correctOption: c.correctOption || ''
+    })));
+    setEditingDeckId(deck.id);
+    setIsCreatingDeck(true);
+  };
+
+  const handleStartCreatingSubdeck = (parentId: string) => {
+    handleCreateNewManualDeck();
+    setParentDeckIdForSubdeck(parentId);
+  };
+
+  const findAndReplaceDeck = (decks: FlashcardDeck[], targetId: string, updatedDeck: FlashcardDeck): FlashcardDeck[] => {
+    return decks.map(d => {
+      if (d.id === targetId) return updatedDeck;
+      if (d.subdecks) {
+        return { ...d, subdecks: findAndReplaceDeck(d.subdecks, targetId, updatedDeck) };
+      }
+      return d;
+    });
+  };
+
+  const findAndAddSubdeck = (decks: FlashcardDeck[], parentId: string, newSubdeck: FlashcardDeck): FlashcardDeck[] => {
+    return decks.map(d => {
+      if (d.id === parentId) {
+        return { ...d, subdecks: [...(d.subdecks || []), newSubdeck] };
+      }
+      if (d.subdecks) {
+        return { ...d, subdecks: findAndAddSubdeck(d.subdecks, parentId, newSubdeck) };
+      }
+      return d;
+    });
   };
 
   const handleSaveAIDeck = () => {
@@ -639,7 +835,15 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     const confirmation = window.confirm("Are you sure you want to delete this custom deck permanently?");
     if (!confirmation) return;
 
-    const updated = myCustomDecks.filter(d => d.id !== deckId);
+    const findAndDeleteRecursive = (decks: FlashcardDeck[], targetId: string): FlashcardDeck[] => {
+      const filtered = decks.filter(d => d.id !== targetId);
+      return filtered.map(d => ({
+        ...d,
+        subdecks: d.subdecks ? findAndDeleteRecursive(d.subdecks, targetId) : undefined
+      }));
+    };
+
+    const updated = findAndDeleteRecursive(myCustomDecks, deckId);
     saveDecksLocally(updated);
   };
 
@@ -675,11 +879,17 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       });
     }
 
+    const shuffledCards = [...deck.cards];
+    for (let i = shuffledCards.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledCards[i], shuffledCards[j]] = [shuffledCards[j], shuffledCards[i]];
+    }
+
     const newRoom: GroupRecallRoom = {
       id: roomId,
       deckId: deck.id,
       deckTitle: deck.title,
-      cards: deck.cards,
+      cards: shuffledCards.slice(0, 20),
       hostEmail: profile.email,
       hostName: myName,
       status: 'lobby',
@@ -1070,9 +1280,48 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
     const memberKey = profile.email.replace(/\./g, '_');
     const updatedParticipants = { ...activeSessionRoom.participants };
+    
+    // Automatic Grading Logic
+    const currentCard = activeSessionRoom.cards[activeSessionRoom.currentCardIndex];
+    const isCorrect = finalAnswer === currentCard.correctOption;
+    
+    let rating: 'perfect' | 'vague' | 'forgot' = 'forgot';
+    let scoreGain = 0;
+
+    if (isCorrect) {
+      if (secondsLeft !== null) {
+        if (secondsLeft >= 15) {
+          rating = 'perfect'; // Blitz
+          scoreGain = 10;
+        } else if (secondsLeft >= 5) {
+          rating = 'vague'; // Rapid
+          scoreGain = 7;
+        } else {
+          rating = 'forgot'; // Standard
+          scoreGain = 5;
+        }
+      } else {
+        rating = 'vague';
+        scoreGain = 5;
+      }
+    }
+
     if (updatedParticipants[memberKey]) {
       updatedParticipants[memberKey].lastAnswerText = finalAnswer;
       updatedParticipants[memberKey].submittedAnswer = true;
+      updatedParticipants[memberKey].selfRating = isCorrect ? rating : 'forgot';
+      updatedParticipants[memberKey].score = (updatedParticipants[memberKey].score || 0) + scoreGain;
+      // Session Hot Streak Logic
+      if (isCorrect) {
+        updatedParticipants[memberKey].streak = (updatedParticipants[memberKey].streak || 0) + 1;
+      } else {
+        updatedParticipants[memberKey].streak = 0;
+      }
+    }
+
+    // Grant XP immediately
+    if (scoreGain > 0) {
+      setProfile(prev => prev ? ({ ...prev, totalXp: prev.totalXp + scoreGain }) : prev);
     }
 
     try {
@@ -1123,41 +1372,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     }
   };
 
-  const handleChooseSelfRecallGrade = async (rating: 'perfect' | 'vague' | 'forgot') => {
-    if (!activeSessionRoom) return;
-    setSelectedSelfRating(rating);
-
-    const scoreGain = rating === 'perfect' ? 10 : rating === 'vague' ? 5 : 0;
-    const memberKey = profile.email.replace(/\./g, '_');
-    
-    // Distribute actual XP to BoardPass profile directly for maximum RPG integration!
-    if (scoreGain > 0) {
-      setProfile(prev => {
-        if (!prev) return prev;
-        const updatedXp = prev.totalXp + scoreGain;
-        return { ...prev, totalXp: updatedXp };
-      });
-    }
-
-    try {
-      const docRef = doc(db, 'liveRecallSessions', activeSessionRoom.id);
-      const freshSnap = await getDoc(docRef);
-      if (freshSnap.exists()) {
-        const currentRoom = freshSnap.data() as GroupRecallRoom;
-        const updatedParticipants = { ...currentRoom.participants };
-        if (updatedParticipants[memberKey]) {
-          updatedParticipants[memberKey].selfRating = rating;
-          updatedParticipants[memberKey].score = (updatedParticipants[memberKey].score || 0) + scoreGain;
-          // Keep submittedAnswer as true so playersDoneSubmitting doesn't flip back to false and lock the UI
-        }
-
-        await updateDoc(docRef, { participants: updatedParticipants });
-      }
-    } catch (err) {
-      console.warn("Could not save score in session room:", err);
-    }
-  };
-
   const handleHostProceedToNextRecallQuiz = async () => {
     if (!activeSessionRoom) return;
 
@@ -1188,11 +1402,27 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         });
 
         setMyWrittenAnswer('');
-        setSelectedSelfRating(null);
       }
     } catch (err) {
       console.warn("State update failure:", err);
     }
+  };
+
+  const handleSendReaction = async (emoji: string) => {
+    if (!activeSessionRoom) return;
+    const myName = profile.username || profile.email.split('@')[0];
+    try {
+      const roomRef = doc(db, 'liveRecallSessions', activeSessionRoom.id);
+      await updateDoc(roomRef, {
+        chatMessages: arrayUnion({
+          id: `react-${Date.now()}-${Math.random()}`,
+          senderName: myName,
+          senderEmail: profile.email,
+          text: `${emoji}`,
+          timestamp: new Date().toLocaleTimeString()
+        })
+      });
+    } catch (e) {}
   };
 
   const handleSendRoomChatMessage = async (e: React.FormEvent) => {
@@ -1502,7 +1732,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       cleanupVoiceLoungeAndRecording();
       setActiveSessionRoom(null);
       setMyWrittenAnswer('');
-      setSelectedSelfRating(null);
       setActiveSubTab('my-decks');
     }
   };
@@ -1797,46 +2026,32 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                     </div>
                   </div>
 
-                  {/* ACTIVE RECALL SELF FEEDBACK CONTROLS */}
+                  {/* AUTOMATIC GRADING FEEDBACK */}
                   <div className="mt-8 space-y-4 max-w-xl mx-auto w-full">
-                    <div className="text-center select-none">
-                      <p className="text-xs font-bold text-gray-600 font-mono uppercase">
-                        How accurately did you recall? (Self-Grading)
-                      </p>
-                    </div>
-
-                    {selectedSelfRating ? (
-                      <div className="p-4 bg-emerald-50 border border-emerald-150 rounded-2xl text-center space-y-1">
-                        <p className="text-xs font-bold text-emerald-900">
-                          Grade registered: <span className="uppercase font-black text-rose-700">{selectedSelfRating}!</span>
+                    {activeSessionRoom.participants[profile.email.replace(/\./g, '_')]?.submittedAnswer && (
+                      <div className={`p-4 rounded-2xl text-center space-y-1 border ${
+                        activeSessionRoom.participants[profile.email.replace(/\./g, '_')]?.lastAnswerText === activeSessionRoom.cards[activeSessionRoom.currentCardIndex].correctOption
+                          ? 'bg-emerald-50 border-emerald-150'
+                          : 'bg-rose-50 border-rose-150'
+                      }`}>
+                        <p className="text-xs font-bold text-gray-900">
+                          {activeSessionRoom.participants[profile.email.replace(/\./g, '_')]?.lastAnswerText === activeSessionRoom.cards[activeSessionRoom.currentCardIndex].correctOption ? (
+                            <>
+                              Auto-Graded: <span className="uppercase font-black text-emerald-600">CORRECT!</span>
+                              <span className="block text-[10px] text-gray-500 font-mono mt-1 italic">
+                                Submission Speed Bonus: +{
+                                  activeSessionRoom.participants[profile.email.replace(/\./g, '_')]?.selfRating === 'perfect' ? '10 XP (BLITZ)' : 
+                                  activeSessionRoom.participants[profile.email.replace(/\./g, '_')]?.selfRating === 'vague' ? '7 XP (RAPID)' : '5 XP (STANDARD)'
+                                }
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              Auto-Graded: <span className="uppercase font-black text-rose-600">INCORRECT</span>
+                              <span className="block text-[10px] text-gray-500 font-mono mt-1 italic">Rule out this concept during the rationalization phase.</span>
+                            </>
+                          )}
                         </p>
-                        <p className="text-[10px] text-gray-505">
-                          {selectedSelfRating === 'perfect' ? 'Excellent! +10 XP added directly to your master Clinical Level record.' : selectedSelfRating === 'vague' ? 'Very close. +5 XP collected for partial memory.' : 'No worries! Mistake-driven learning cements retention.'}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-3">
-                        <button
-                          onClick={() => handleChooseSelfRecallGrade('perfect')}
-                          className="p-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase duration-150 rounded-xl cursor-pointer text-center space-y-1 block border-b-2 border-emerald-800"
-                        >
-                          <span className="text-base block">🎉</span>
-                          <span>Perfect Recall</span>
-                        </button>
-                        <button
-                          onClick={() => handleChooseSelfRecallGrade('vague')}
-                          className="p-3 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs uppercase duration-150 rounded-xl cursor-pointer text-center space-y-1 block border-b-2 border-amber-750"
-                        >
-                          <span className="text-base block">🤔</span>
-                          <span>Vague Answer</span>
-                        </button>
-                        <button
-                          onClick={() => handleChooseSelfRecallGrade('forgot')}
-                          className="p-3 bg-red-600 hover:bg-red-700 text-white font-bold text-xs uppercase duration-150 rounded-xl cursor-pointer text-center space-y-1 block border-b-2 border-red-800"
-                        >
-                          <span className="text-base block">💨</span>
-                          <span>Forgot/Blank</span>
-                        </button>
                       </div>
                     )}
 
@@ -1893,7 +2108,6 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                     onClick={() => {
                       setActiveSessionRoom(null);
                       setMyWrittenAnswer('');
-                      setSelectedSelfRating(null);
                       setActiveSubTab('my-decks');
                     }}
                     className="px-6 py-2.5 bg-pine hover:bg-pine-mid text-cream text-xs font-black uppercase tracking-widest rounded-xl shadow-xs"
@@ -1942,6 +2156,11 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                           <div>
                             <p className="text-xs text-gray-800 truncate max-w-[120px] flex items-center gap-1">
                               {player.name}
+                              {(player.streak || 0) >= 2 && (
+                                <span className={`shrink-0 flex items-center gap-0.5 px-1 py-0.5 ${player.streak >= 5 ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-orange-100 text-orange-700 border-orange-200'} border rounded-md text-[7px] font-mono leading-none animate-bounce`}>
+                                  <Flame className="w-1.5 h-1.5 fill-current" /> {player.streak} STREAK
+                                </span>
+                              )}
                               {player.voiceConnected && (
                                 <span className="shrink-0 flex items-center gap-0.5 select-none">
                                   {player.isSpeaking ? (
@@ -2077,7 +2296,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
             </div>
 
             {/* Arena Live Chat Feed */}
-            <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-sm space-y-4 h-[350px] flex flex-col justify-between">
+            <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-sm space-y-4 h-[400px] flex flex-col justify-between overflow-hidden relative">
               <h4 className="font-display text-base text-pine flex items-center gap-1.5 select-none font-black uppercase tracking-wider font-mono border-b border-gray-50 pb-2">
                 <MessageSquare className="w-4 h-4 text-emerald-600" />
                 Study Room Chat
@@ -2086,23 +2305,28 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
               <div className="flex-grow overflow-y-auto space-y-3 pr-1 py-1 no-scrollbar col-span-1 border border-transparent">
                 {activeSessionRoom.chatMessages.map((msg, i) => {
                   const isSystem = msg.senderEmail === 'admin@boardpassph.com';
+                  const isReaction = msg.text.length < 5 && !msg.audioUrl;
                   return (
                     <div 
                       key={msg.id || i}
                       className={`text-xs p-3 rounded-2xl border space-y-1.5 transition duration-150 ${
                         isSystem 
                           ? 'bg-emerald-50/40 border-emerald-100 text-emerald-800 italic' 
-                          : 'bg-gray-50 border-gray-150 shadow-xs'
+                          : isReaction
+                            ? 'bg-amber-50/30 border-amber-100 text-center scale-110 shadow-sm'
+                            : 'bg-gray-50 border-gray-150 shadow-xs'
                       }`}
                     >
-                      <div className="flex justify-between items-center select-none border-b border-gray-100/50 pb-0.5">
-                        <span className="text-[9px] uppercase font-mono font-black text-gray-500">
-                          {msg.senderName}
-                        </span>
-                        <span className="text-[8px] font-mono text-gray-400">
-                          {msg.timestamp}
-                        </span>
-                      </div>
+                      {!isReaction && (
+                        <div className="flex justify-between items-center select-none border-b border-gray-100/50 pb-0.5">
+                          <span className="text-[9px] uppercase font-mono font-black text-gray-500">
+                            {msg.senderName}
+                          </span>
+                          <span className="text-[8px] font-mono text-gray-400">
+                            {msg.timestamp}
+                          </span>
+                        </div>
+                      )}
                       
                       {msg.audioUrl ? (
                         <div className="bg-white border border-gray-200 rounded-xl p-2 flex items-center justify-between gap-3 shadow-2xs select-none">
@@ -2138,6 +2362,18 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                     </div>
                   );
                 })}
+              </div>
+
+               <div className="flex gap-1 mb-2">
+                {['👏', '🔥', '🤓', '💯', '🤔'].map(emoji => (
+                  <button 
+                    key={emoji}
+                    onClick={() => handleSendReaction(emoji)}
+                    className="w-8 h-8 rounded-full bg-gray-50 border border-gray-100 hover:bg-white hover:border-pine/30 flex items-center justify-center text-sm cursor-pointer hover:scale-125 transition active:scale-95 shadow-2xs"
+                  >
+                    {emoji}
+                  </button>
+                ))}
               </div>
 
               <form onSubmit={handleSendRoomChatMessage} className="flex gap-2 border-t border-gray-100 pt-3 relative">
@@ -2238,7 +2474,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                 <X className="w-5 h-5" />
               </button>
 
-              <h3 className="font-display text-2xl text-pine mb-4">Manual Flashcard Creator</h3>
+              <h3 className="font-display text-2xl text-pine mb-4">
+                {editingDeckId ? "Edit Flashcard Deck" : parentDeckIdForSubdeck ? "Create New Subdeck" : "Manual Flashcard Creator"}
+              </h3>
               
               <div className="space-y-4 max-w-2xl">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2409,62 +2647,16 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {myCustomDecks.map((deck) => (
-                    <div key={deck.id} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] uppercase font-extrabold text-[#11321e] bg-emerald-50 border border-emerald-100 px-2.5 py-0.5 rounded-full select-none">
-                            {deck.category || "General Psychology"}
-                          </span>
-                          <span className="text-[10px] font-mono font-bold text-gray-400">
-                            {deck.cards.length} Active Cards
-                          </span>
-                        </div>
-                        <h4 className="font-display text-lg px-0.5 font-bold leading-tight text-pine">
-                          {deck.title}
-                        </h4>
-                        <p className="text-xs text-gray-500 line-clamp-2 px-0.5">
-                          {deck.description}
-                        </p>
-                      </div>
-
-                      <div className="pt-3 border-t border-gray-100 flex gap-2 flex-wrap">
-                        <button
-                          onClick={() => handleLaunchLiveGroupRecall(deck, false)}
-                          className="px-3 py-1.5 bg-pine hover:bg-pine-mid text-cream text-[10px] font-black uppercase tracking-wider rounded-lg flex items-center gap-1 cursor-pointer"
-                          title="Share code with classmates to play together!"
-                        >
-                          <Users className="w-3 h-3 text-mint" />
-                          Host Live Arena
-                        </button>
-                        
-                        <button
-                          onClick={() => handleLaunchLiveGroupRecall(deck, true)}
-                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-cream text-[10px] font-black uppercase tracking-wider rounded-lg flex items-center gap-1 cursor-pointer"
-                          title="Launch simulated game room solo with virtual peers!"
-                        >
-                          <Play className="w-3 h-3" />
-                          Solo Arena
-                        </button>
-
-                        {!deck.isPublic && (
-                          <button
-                            onClick={() => handleShareDeckWithPublic(deck)}
-                            className="px-3 py-1.5 border border-emerald-200 text-emerald-800 hover:bg-emerald-50 text-[10px] font-black uppercase tracking-wider rounded-lg flex items-center gap-1 cursor-pointer"
-                            title="Publish this deck to community Directory"
-                          >
-                            <Globe className="w-3 h-3" />
-                            Share Community
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => handleDeleteCustomDeck(deck.id)}
-                          className="px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 text-[10px] font-bold uppercase rounded-lg cursor-pointer ml-auto"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
+                    <FlashcardDeckItem 
+                      key={deck.id}
+                      deck={deck}
+                      onEdit={handleStartEditingDeck}
+                      onDelete={handleDeleteCustomDeck}
+                      onAddSubdeck={handleStartCreatingSubdeck}
+                      onLaunchSolo={(d) => handleLaunchLiveGroupRecall(d, true)}
+                      onLaunchLive={(d) => handleLaunchLiveGroupRecall(d, false)}
+                      onShare={handleShareDeckWithPublic}
+                    />
                   ))}
                 </div>
               )}

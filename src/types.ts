@@ -147,6 +147,7 @@ export interface FlashcardDeck {
   createdAt: string;
   category?: string;
   downloads?: number;
+  subdecks?: FlashcardDeck[];
 }
 
 export interface GroupRecallRoom {
@@ -158,10 +159,11 @@ export interface GroupRecallRoom {
   hostName: string;
   status: 'lobby' | 'active' | 'reveal' | 'finished';
   currentCardIndex: number;
-  participants: Record<string, {
+    participants: Record<string, {
     email: string;
     name: string;
     score: number;
+    streak?: number;
     lastAnswerText?: string;
     submittedAnswer?: boolean;
     selfRating?: 'perfect' | 'vague' | 'forgot' | null;
