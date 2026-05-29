@@ -243,65 +243,86 @@ Generate a highly optimized, high-yield deck of exactly 10 professional MCQ flas
     const response = await generateContentWithFallback(ai, {
       contents: `Read all the following study references and formulate a comprehensive set of study flashcards covering every important note, definition, and concept: ${referenceInput}`,
       config: {
-        systemInstruction: sysInstruct,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          required: ['cards'],
-          properties: {
-            cards: {
-              type: Type.ARRAY,
-              description: 'List of generated flashcard objects covering all important notes in the material',
-              items: {
-                type: Type.OBJECT,
-                required: ['id', 'front', 'back', 'options', 'correctOption'],
-                properties: {
-                  id: {
-                    type: Type.STRING,
-                    description: 'A unique short identifier for the flashcard'
-                  },
-                  front: {
-                    type: Type.STRING,
-                    description: 'The front side of the flashcard containing the active recall prompt or clinical vignette'
-                  },
-                  back: {
-                    type: Type.STRING,
-                    description: 'The reverse side of the flashcard holding the detailed, precise explanation'
-                  },
-                  hint: {
-                    type: Type.STRING,
-                    description: 'Optional retrieving cue or tip'
-                  },
-                  options: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: 'Exactly 4 multiple choice correct and distractor options'
-                  },
-                  correctOption: {
-                    type: Type.STRING,
-                    description: 'The exact string of the correct option from the options array'
-                  }
-                }
-              }
+app.post('/api/generate-deck', async (req, res) => {
+  const { textPayload, fileContent, fileName, chunkIndex, totalChunks, customApiKey } = req.body;
+  const ai = customApiKey && customApiKey.trim() !== ''
+    ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } })
+    : getGemini();
+
+  if (!ai) {
+    return res.json({ isFallback: true, msg: 'No active Gemini key present.' });
+  }
+
+  // Set SSE headers for streaming
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (data: object) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const MAX_CHAR_CAP = 15000;
+    let trimmedPayload = (textPayload || '').trim();
+    let trimmedFile = (fileContent || '').trim();
+
+    if (trimmedPayload.length > MAX_CHAR_CAP) trimmedPayload = trimmedPayload.substring(0, MAX_CHAR_CAP);
+    if (trimmedFile.length > MAX_CHAR_CAP) trimmedFile = trimmedFile.substring(0, MAX_CHAR_CAP);
+
+    let referenceInput = '';
+    if (trimmedPayload) referenceInput += `\nPASTED NOTES:\n${trimmedPayload}\n`;
+    if (trimmedFile) referenceInput += `\nUPLOADED FILE (${fileName || 'document'}):\n${trimmedFile}\n`;
+
+    if (!referenceInput.trim()) {
+      sendEvent({ error: 'Please provide notes or a file.' });
+      return res.end();
+    }
+
+    let progressContext = '';
+    if (chunkIndex && totalChunks) {
+      progressContext = `You are processing section ${chunkIndex} of ${totalChunks}.`;
+    }
+
+    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Generate exactly 10 MCQ flashcards. For EACH card, immediately output a single JSON object (not an array) on one line. Output one card at a time as you generate it. Each JSON must have: id, front, back, hint, options (array of 4), correctOption. ${progressContext}`;
+
+    // Generate cards one at a time using streaming
+    for (let i = 1; i <= 10; i++) {
+      sendEvent({ status: 'generating', current: i, total: 10 });
+
+      const response = await generateContentWithFallback(ai, {
+        contents: `Generate flashcard #${i} of 10 from this material. Return ONLY a single JSON object for this one card:\n${referenceInput}`,
+        config: {
+          systemInstruction: sysInstruct,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            required: ['id', 'front', 'back', 'options', 'correctOption'],
+            properties: {
+              id: { type: Type.STRING },
+              front: { type: Type.STRING },
+              back: { type: Type.STRING },
+              hint: { type: Type.STRING },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
+              correctOption: { type: Type.STRING }
             }
           }
         }
-      }
-    });
+      });
 
-    const parsedData = JSON.parse(response.text || '{"cards":[]}');
-    return res.json({
-      cards: parsedData.cards || [],
-      isFallback: false
-    });
+      const card = JSON.parse(response.text || '{}');
+      sendEvent({ card, current: i, total: 10 });
+    }
+
+    sendEvent({ done: true });
+    res.end();
   } catch (err: any) {
-    console.error('Gemini flashcard generation error:', err.message || err);
-    return res.json({ 
-      isFallback: true, 
-      msg: err.message || 'API failed to parse or retrieve flashcard deck' 
-    });
+    console.error('Streaming deck error:', err.message || err);
+    sendEvent({ error: err.message || 'Generation failed' });
+    res.end();
   }
-});
+})
 
 app.post('/api/parse-document', async (req, res) => {
   const { base64, fileName, fileType } = req.body;
