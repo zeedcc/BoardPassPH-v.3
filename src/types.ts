@@ -73,6 +73,7 @@ export interface UserProfile {
   signUpDate?: string;
   moods?: Record<string, string>;
   habitsChecked?: Record<string, Record<string, boolean>>;
+  flashcardDecks?: FlashcardDeck[];
   calendarEvents?: Record<string, { id: string; title: string; note?: string; color: string; time?: string }[]>;
   dailyChallenges?: Record<string, 'correct' | 'incorrect'>;
   allowPushNotifications?: boolean;

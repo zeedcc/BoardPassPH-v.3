@@ -172,6 +172,7 @@ export default function App() {
 
   // Load profile upon startup on this client
   useEffect(() => {
+    import('./firebase').then(m => m.initializeFirebase());
     const initializeProfile = async () => {
       try {
         const lastEmail = localStorage.getItem('bp_last_logged_email');
@@ -268,6 +269,7 @@ export default function App() {
       await setDoc(docRef, profile);
       await new Promise(resolve => setTimeout(resolve, 650));
       setSyncStatus('synced');
+      alert("✅ Review session data safely backed up to Google Cloud Firestore. Your progress, flashcards, and notes are now synchronized across all your devices!");
     } catch (err) {
       console.warn("Manual cloud sync failed:", err);
       setSyncStatus('synced');

@@ -198,17 +198,26 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const micStreamRef = useRef<MediaStream | null>(null);
   const rafIdRef = useRef<number | null>(null);
   
-  // Load my-decks from localStorage
+  // Load my-decks from localStorage or profile (prefer profile for cloud sync)
   useEffect(() => {
-    const saved = localStorage.getItem(`bp_flashcards_${profile.email}`);
-    if (saved) {
-      try {
-        setMyCustomDecks(JSON.parse(saved));
-      } catch (err) {
-        console.warn("Could not load custom flashcard decks", err);
-      }
+    if (profile.flashcardDecks && profile.flashcardDecks.length > 0) {
+      setMyCustomDecks(profile.flashcardDecks);
     } else {
-      localStorage.setItem(`bp_flashcards_${profile.email}`, JSON.stringify([]));
+      const saved = localStorage.getItem(`bp_flashcards_${profile.email}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setMyCustomDecks(parsed);
+          // If profile is empty but local has data, sync it up
+          if (parsed.length > 0) {
+            setProfile((prev: UserProfile | null) => prev ? ({ ...prev, flashcardDecks: parsed }) : prev);
+          }
+        } catch (err) {
+          console.warn("Could not load custom flashcard decks", err);
+        }
+      } else {
+        localStorage.setItem(`bp_flashcards_${profile.email}`, JSON.stringify([]));
+      }
     }
     fetchPublicDecks();
   }, [profile.email]);
@@ -296,6 +305,11 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const saveDecksLocally = (updated: FlashcardDeck[]) => {
     setMyCustomDecks(updated);
     localStorage.setItem(`bp_flashcards_${profile.email}`, JSON.stringify(updated));
+    // Update profile so the Cloud Sync button actually has access to this data
+    setProfile((prev: UserProfile | null) => {
+      if (!prev) return prev;
+      return { ...prev, flashcardDecks: updated };
+    });
   };
 
   function SEED_PUBLIC_DECKS(): FlashcardDeck[] {
@@ -2323,11 +2337,15 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                       <div className="relative">
                         <button
                           onClick={handleToggleMuteVoiceLounge}
-                          className={`p-1.5 rounded-full cursor-pointer transition ${
-                            isVoiceMuted ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-250'
+                          className={`px-3 py-1.5 rounded-xl cursor-pointer transition flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider border shadow-sm ${
+                            isVoiceMuted ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200'
                           }`}
                         >
-                          {isVoiceMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                          {isVoiceMuted ? (
+                            <><MicOff className="w-3.5 h-3.5" /> Unmute Me</>
+                          ) : (
+                            <><Mic className="w-3.5 h-3.5" /> Mute Myself</>
+                          )}
                         </button>
                         {!isVoiceMuted && localVoiceVolume > 15 && (
                           <span className="absolute -top-1 -right-1 flex h-2 w-2">
