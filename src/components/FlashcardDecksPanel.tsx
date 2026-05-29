@@ -1649,7 +1649,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
           setLocalVoiceVolume(volumeScaled);
 
           // Throttled Firestore speaking state sync
-          const isSpeaking = volumeScaled > 15;
+          const isSpeaking = volumeScaled > 8; // Lowered from 15 for better mic sensitivity
           
           // VOX Auto-recording logic for Hands-free Voice Lounge
           if (voiceLoungeConnectedRef.current && !isVoiceMutedRef.current && !isRecordingVoiceRef.current && isSpeaking && !isAutoRecordingRef.current) {
@@ -1874,21 +1874,40 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   }, []);
 
   // Auto-play incoming voice notes if in voice lounge
+  // Uses a pending queue to retry playback on next user interaction if browser blocks auto-play
+  const pendingAudioQueue = useRef<HTMLAudioElement[]>([]);
+
+  const flushPendingAudio = () => {
+    while (pendingAudioQueue.current.length > 0) {
+      const a = pendingAudioQueue.current.shift();
+      if (a) a.play().catch(() => {});
+    }
+  };
+
+  useEffect(() => {
+    // Flush any queued audio on any user gesture (click/keydown)
+    document.addEventListener('click', flushPendingAudio, { once: false });
+    document.addEventListener('keydown', flushPendingAudio, { once: false });
+    return () => {
+      document.removeEventListener('click', flushPendingAudio);
+      document.removeEventListener('keydown', flushPendingAudio);
+    };
+  }, []);
+
   useEffect(() => {
     if (!voiceLoungeConnected || !activeSessionRoom) return;
 
     activeSessionRoom.chatMessages.forEach(msg => {
       if (msg.audioUrl && msg.senderEmail !== profile.email && !playedVoiceNoteIds.current.has(msg.id)) {
         playedVoiceNoteIds.current.add(msg.id);
-        
-        // Auto-play the audio
+
         try {
           const audio = new Audio(msg.audioUrl);
           audio.volume = 1.0;
-          
-          // Browser policy check: only play if user has interacted which they have if connected to lounge
-          audio.play().catch(err => {
-            console.warn("Auto-play blocked by browser. User needs to interact with page first.", err);
+
+          // Try auto-play; if browser blocks it, queue for next user interaction
+          audio.play().catch(() => {
+            pendingAudioQueue.current.push(audio);
           });
         } catch (e) {
           console.error("Audio auto-play failed:", e);
@@ -2544,14 +2563,14 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                   <div className="flex-grow bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-rose-700 flex items-center justify-between animate-pulse">
                     <span className="flex items-center gap-1.5 select-none text-[10px] uppercase font-bold tracking-wide">
                       <span className="h-2.5 w-2.5 rounded-full bg-rose-600 animate-ping shrink-0" />
-                      {isAutoRecordingRef.current ? "BP AirTime: Live Broadcasting" : "REC VOICE NOTE"}: {recordingSeconds}s
+                      {"REC VOICE NOTE"}: {recordingSeconds}s
                     </span>
                     <button
                       type="button"
                       onClick={handleStopVoiceRecording}
                       className="text-[9px] uppercase font-black text-rose-900 bg-rose-100 hover:bg-rose-200 border border-rose-300 px-2 py-1 rounded-lg cursor-pointer"
                     >
-                      {isAutoRecordingRef.current ? "Stop Mic" : "Stop & Send"}
+                      {"Stop & Send"}
                     </button>
                   </div>
                 ) : (
