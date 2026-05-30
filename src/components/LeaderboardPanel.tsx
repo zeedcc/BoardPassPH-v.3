@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Award, RefreshCw, Sparkles, CheckCircle2, AlertCircle, Trophy, Sparkle, Search } from 'lucide-react';
 import { UserProfile } from '../types';
-import { db } from '../firebase';
+import { db, firestoreWithTimeout } from '../firebase';
 import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 
 interface LeaderboardPanelProps {
@@ -103,9 +103,9 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ profile }) =
       }
 
       // Step B: Retrieve all registered national candidates synced on Firestore
-      const querySnapshot = await getDocs(collection(db, 'leaderboard'));
+      const querySnapshot = await firestoreWithTimeout(getDocs(collection(db, 'leaderboard')));
       const cloudUsers: any[] = [];
-      querySnapshot.forEach((docSnap) => {
+      querySnapshot.forEach((docSnap: any) => {
         cloudUsers.push(docSnap.data());
       });
 

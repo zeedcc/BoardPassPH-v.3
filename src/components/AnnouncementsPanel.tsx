@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Megaphone, Calendar, Clock, Link as LinkIcon, Info } from 'lucide-react';
-import { db } from '../firebase';
+import { db, firestoreWithTimeout } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
 const BULLETINS: any[] = [];
@@ -30,9 +30,9 @@ export const AnnouncementsPanel: React.FC = () => {
           }
         }
 
-        const snapshot = await getDocs(collection(db, 'custom_announcements'));
+        const snapshot = await firestoreWithTimeout(getDocs(collection(db, 'custom_announcements')));
         const fbList: any[] = [];
-        snapshot.forEach(doc => {
+        snapshot.forEach((doc: any) => {
           fbList.push(doc.data());
         });
         if (fbList.length > 0) {

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Database, Plus, Trash2, CheckCircle, Clock, Check, X, AlertCircle, RefreshCw, Landmark, HelpCircle, BookOpen, UploadCloud, FileJson } from 'lucide-react';
+import { Shield, Database, Plus, Trash2, CheckCircle, Clock, Check, X, AlertCircle, RefreshCw, Landmark, HelpCircle, BookOpen, UploadCloud, FileJson, Mail, Inbox, Reply } from 'lucide-react';
 import { SEED_QUESTIONS } from '../data/seedQuestions';
 import { UserProfile, GCashPaymentRequest } from '../types';
 import { getAllGCashRequests, approveGCashRequest, rejectGCashRequest } from '../utils/gcashHelpers';
 import { db, firestoreWithTimeout } from '../firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 
 interface AdminPanelProps {
   onRefreshSeeds: () => void;
@@ -13,7 +13,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentUser, setCurrentUser }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'questions' | 'billing' | 'users' | 'announcements' | 'import'>('billing'); // Default to billing for the reviewee's convenience!
+  const [activeSubTab, setActiveSubTab] = useState<'questions' | 'billing' | 'users' | 'announcements' | 'import' | 'inbox'>('billing'); // Default to billing for the reviewee's convenience!
   
   // Announcements Posting States
   const [annTitle, setAnnTitle] = useState('');
@@ -49,7 +49,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
     setCustomAnnouncements(nextList);
     
     try {
-      await firestoreWithTimeout(setDoc(doc(db, 'custom_announcements', newAnn.id), newAnn), 5000);
+      await firestoreWithTimeout(setDoc(doc(db, 'custom_announcements', newAnn.id), newAnn));
     } catch (err) {
       console.warn('Failed to post announcement on Firestore:', err);
     }
@@ -99,6 +99,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
   const [rejectionReasonMap, setRejectionReasonMap] = useState<Record<string, string>>({});
   const [showRejectInputId, setShowRejectInputId] = useState<string | null>(null);
 
+  // Inbox / Feedbacks states
+  const [feedbacks, setFeedbacks] = useState<any[]>([]);
+  const [loadingFeedbacks, setLoadingFeedbacks] = useState(false);
+  const [replyTextMap, setReplyTextMap] = useState<Record<string, string>>({});
+  const [showReplyId, setShowReplyId] = useState<string | null>(null);
+
+  const loadFeedbacks = async () => {
+    setLoadingFeedbacks(true);
+    try {
+      const snapshot = await firestoreWithTimeout(getDocs(collection(db, 'feedbacks')));
+      const list: any[] = [];
+      snapshot.forEach((doc: any) => {
+        list.push({ id: doc.id, ...doc.data() });
+      });
+      list.sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+      setFeedbacks(list);
+    } catch (err) {
+      console.warn('Could not read feedbacks', err);
+    } finally {
+      setLoadingFeedbacks(false);
+    }
+  };
+
+  const handleReplyToFeedback = async (id: string, email: string) => {
+    const replyText = replyTextMap[id];
+    if (!replyText?.trim()) {
+      alert("Please enter a reply message.");
+      return;
+    }
+    try {
+      await firestoreWithTimeout(updateDoc(doc(db, 'feedbacks', id), {
+        adminReply: replyText.trim(),
+        repliedAt: new Date().toISOString()
+      }));
+      alert('Reply saved inline! You may also click Mail to send it directly.');
+      setShowReplyId(null);
+      await loadFeedbacks();
+    } catch (e: any) {
+      alert("Failed to submit reply: " + e.message);
+    }
+  };
+
   // Import states
   const [importStatus, setImportStatus] = useState<string>('');
   const [importLoading, setImportLoading] = useState(false);
@@ -135,7 +177,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
       for (const profile of profilesToImport) {
         if (profile.email) {
           const emailKey = profile.email.toLowerCase().trim();
-          await firestoreWithTimeout(setDoc(doc(db, 'profiles', emailKey), profile, { merge: true }), 4000);
+          await firestoreWithTimeout(setDoc(doc(db, 'profiles', emailKey), profile, { merge: true }));
           importedCount++;
           if (importedCount % 5 === 0) {
             setImportStatus(`Importing... (${importedCount}/${profilesToImport.length})`);
@@ -191,7 +233,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
     // Merged live: query whole profiles collection from Firestore
     const cloudEmails = new Set<string>();
     try {
-      const snapshot = await getDocs(collection(db, 'profiles'));
+      const snapshot = await firestoreWithTimeout(getDocs(collection(db, 'profiles')));
       snapshot.forEach(doc => {
         const data = doc.data();
         if (data.email) {
@@ -284,7 +326,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
 
     // Update in Firestore
     try {
-      await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), clearedProfile), 5000);
+      await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), clearedProfile));
     } catch (fbErr) {
       console.warn('Could not post profile reset to Firestore:', fbErr);
     }
@@ -315,7 +357,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
         
         // Sync to cloud
         try {
-          await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), parsed), 4000);
+          await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), parsed));
         } catch (fbErr) {
           console.warn('Could not sync user XP reset to Firestore:', fbErr);
         }
@@ -343,7 +385,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
         
         // Sync to cloud
         try {
-          await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), parsed), 4000);
+          await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), parsed));
         } catch (fbErr) {
           console.warn('Could not elevated subscription in Firestore:', fbErr);
         }
@@ -369,7 +411,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
 
     for (const email of emails) {
        try {
-         await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), { tier: 'Clinical Suite' }, { merge: true }), 4000);
+         await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), { tier: 'Clinical Suite' }, { merge: true }));
          console.log(`Successfully upgraded ${email}`);
        } catch (e) {
          console.error(`Failed to upgrade ${email}`, e);
@@ -395,7 +437,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
 
   const loadAnnouncements = async () => {
     try {
-      const snapshot = await getDocs(collection(db, 'custom_announcements'));
+      const snapshot = await firestoreWithTimeout(getDocs(collection(db, 'custom_announcements')));
       const fbList: any[] = [];
       snapshot.forEach(doc => {
         fbList.push(doc.data());
@@ -411,8 +453,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
   useEffect(() => {
     loadBillingRequests();
     loadAnnouncements();
+    loadFeedbacks();
     // Poll every 4 seconds so that testing between multiple tabs is instantaneous!
-    const interval = setInterval(loadBillingRequests, 4000);
+    const interval = setInterval(() => {
+      loadBillingRequests();
+      loadFeedbacks();
+    }, 4000);
     return () => clearInterval(interval);
   }, []);
 
@@ -503,60 +549,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
         </p>
 
         {/* Dual Mode Sub Navigation menu */}
-        <div className="flex gap-1 bg-teal-950/55 p-1 rounded-xl border border-teal-700/30 max-w-2xl mt-5 font-mono text-[9px] font-black uppercase tracking-wider">
-          <button
-            onClick={() => setActiveSubTab('billing')}
-            className={`flex-1 px-2 py-2 rounded-lg transition duration-150 cursor-pointer ${
-              activeSubTab === 'billing' 
-                ? 'bg-cream text-teal-950 font-black shadow-xs' 
-                : 'text-teal-200 hover:text-white'
-            }`}
-          >
-            💳 GCash ({billingRequests.filter(r => r.status === 'pending').length} Pending)
-          </button>
-          <button
-            onClick={() => setActiveSubTab('questions')}
-            className={`flex-1 px-2 py-2 rounded-lg transition duration-150 cursor-pointer ${
-              activeSubTab === 'questions' 
-                ? 'bg-cream text-teal-950 font-black shadow-xs' 
-                : 'text-teal-200 hover:text-white'
-            }`}
-          >
-            ✏️ MCQ Curricula
-          </button>
-          <button
-            onClick={() => {
-              setActiveSubTab('users');
-              loadLocalUsers();
-            }}
-            className={`flex-1 px-2 py-2 rounded-lg transition duration-150 cursor-pointer ${
-              activeSubTab === 'users' 
-                ? 'bg-cream text-teal-950 font-black shadow-xs' 
-                : 'text-teal-200 hover:text-white'
-            }`}
-          >
-            🧑‍🎓 Reviewees ({localUsers.length})
-          </button>
-          <button
-            onClick={() => setActiveSubTab('announcements')}
-            className={`flex-1 px-2 py-2 rounded-lg transition duration-150 cursor-pointer ${
-              activeSubTab === 'announcements' 
-                ? 'bg-cream text-teal-950 font-black shadow-xs' 
-                : 'text-teal-200 hover:text-white'
-            }`}
-          >
-            📢 Post Announcements ({customAnnouncements.length})
-          </button>
-          <button
-            onClick={() => setActiveSubTab('import')}
-            className={`flex-1 px-2 py-2 rounded-lg transition duration-150 cursor-pointer ${
-              activeSubTab === 'import' 
-                ? 'bg-cream text-teal-950 font-black shadow-xs' 
-                : 'text-teal-200 hover:text-white'
-            }`}
-          >
-            📥 Import Data
-          </button>
+        <div className="flex bg-teal-950/55 p-1 rounded-xl border border-teal-700/30 w-full md:w-auto mt-5 font-mono text-[9px] font-black uppercase tracking-wider overflow-x-auto no-scrollbar snap-x whitespace-nowrap">
+          <div className="flex gap-1 min-w-max">
+            <button
+              onClick={() => setActiveSubTab('billing')}
+              className={`flex-none px-3 py-2.5 rounded-lg transition duration-150 cursor-pointer text-center snap-start ${
+                activeSubTab === 'billing' 
+                  ? 'bg-cream text-teal-950 font-black shadow-xs' 
+                  : 'text-teal-200 hover:text-white'
+              }`}
+            >
+              💳 GCash ({billingRequests.filter(r => r.status === 'pending').length} Pending)
+            </button>
+            <button
+              onClick={() => setActiveSubTab('questions')}
+              className={`flex-none px-3 py-2.5 rounded-lg transition duration-150 cursor-pointer text-center snap-start ${
+                activeSubTab === 'questions' 
+                  ? 'bg-cream text-teal-950 font-black shadow-xs' 
+                  : 'text-teal-200 hover:text-white'
+              }`}
+            >
+              ✏️ MCQ Curricula
+            </button>
+            <button
+              onClick={() => {
+                setActiveSubTab('users');
+                loadLocalUsers();
+              }}
+              className={`flex-none px-3 py-2.5 rounded-lg transition duration-150 cursor-pointer text-center snap-start ${
+                activeSubTab === 'users' 
+                  ? 'bg-cream text-teal-950 font-black shadow-xs' 
+                  : 'text-teal-200 hover:text-white'
+              }`}
+            >
+              🧑‍🎓 Reviewees ({localUsers.length})
+            </button>
+            <button
+              onClick={() => setActiveSubTab('announcements')}
+              className={`flex-none px-3 py-2.5 rounded-lg transition duration-150 cursor-pointer text-center snap-start ${
+                activeSubTab === 'announcements' 
+                  ? 'bg-cream text-teal-950 font-black shadow-xs' 
+                  : 'text-teal-200 hover:text-white'
+              }`}
+            >
+              📢 Post Announcements ({customAnnouncements.length})
+            </button>
+            <button
+              onClick={() => setActiveSubTab('import')}
+              className={`flex-none px-3 py-2.5 rounded-lg transition duration-150 cursor-pointer text-center snap-start ${
+                activeSubTab === 'import' 
+                  ? 'bg-cream text-teal-950 font-black shadow-xs' 
+                  : 'text-teal-200 hover:text-white'
+              }`}
+            >
+              📥 Import Data
+            </button>
+            <button
+              onClick={() => setActiveSubTab('inbox')}
+              className={`flex-none px-3 py-2.5 rounded-lg transition duration-150 cursor-pointer text-center snap-start ${
+                activeSubTab === 'inbox' 
+                  ? 'bg-cream text-teal-950 font-black shadow-xs' 
+                  : 'text-teal-200 hover:text-white'
+              }`}
+            >
+              📨 Inbox ({feedbacks.filter(f => !f.adminReply).length})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1207,6 +1265,111 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
               </div>
             )}
           </div>
+        </div>
+      )}
+      {activeSubTab === 'inbox' && (
+        <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-100 pb-4 gap-3">
+            <div className="space-y-1">
+              <h4 className="font-heading font-black text-xs text-gray-500 uppercase tracking-widest flex items-center gap-1.5 font-mono">
+                <Inbox className="w-4 h-4 text-teal-700 animate-pulse" />
+                Help Desk & Feedback Inbox
+              </h4>
+              <p className="text-[10px] text-gray-400 font-mono">
+                View submitted platform critiques, issues, and inquiries from students. Address them inline or via direct email.
+              </p>
+            </div>
+            <button
+              onClick={loadFeedbacks}
+              disabled={loadingFeedbacks}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-xl text-[10px] font-mono font-bold text-gray-600 hover:bg-gray-50 uppercase tracking-wider cursor-pointer"
+            >
+              <RefreshCw className={`w-3 h-3 ${loadingFeedbacks ? 'animate-spin' : ''}`} />
+              Sync Inbox
+            </button>
+          </div>
+
+          {feedbacks.length === 0 ? (
+            <div className="text-center py-10 bg-gray-50 p-6 rounded-2xl border border-dashed border-gray-200 flex flex-col items-center space-y-2">
+              <Inbox className="w-8 h-8 text-gray-300" />
+              <p className="text-xs font-bold text-gray-500 font-mono uppercase">Inbox is Empty</p>
+              <p className="text-[10px] text-gray-400 max-w-sm">No new feedback or support tickets to display.</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {feedbacks.map((fb) => {
+                const isReplied = !!fb.adminReply;
+
+                return (
+                  <div key={fb.id} className={`border rounded-2xl p-4.5 space-y-3.5 transition duration-150 ${
+                    isReplied ? 'border-gray-200 bg-gray-50/50' : 'border-teal-200 bg-teal-50/20'
+                  }`}>
+                    <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                      <div className="space-y-2 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap text-[10px] font-mono">
+                           <span className="font-black text-gray-700 uppercase">{fb.email}</span>
+                           <span className="bg-gray-100 border border-gray-200 text-gray-600 px-2 py-0.5 rounded uppercase tracking-wider">{fb.topic}</span>
+                           <span className="text-amber-500 font-bold">{fb.rating}/5 Stars</span>
+                           <span className="text-gray-400">{fb.timestamp ? new Date(fb.timestamp).toLocaleString() : 'No timestamp'}</span>
+                        </div>
+                        <p className="text-xs text-gray-800 bg-white p-3 rounded-xl border border-gray-100 shadow-inner font-medium">
+                          {fb.message}
+                        </p>
+                        {isReplied && (
+                          <div className="mt-2 bg-indigo-50 border border-indigo-100 p-3 rounded-xl space-y-1">
+                            <span className="text-[9px] uppercase font-bold text-indigo-800 font-mono">Your Inline Reply:</span>
+                            <p className="text-xs text-indigo-950 font-medium">{fb.adminReply}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-2 shrink-0">
+                        <a
+                          href={`mailto:${fb.email}?subject=Re: BoardPassPH - ${fb.topic}&body=\n\n\n--- Your Original Message:\n${encodeURIComponent(fb.message)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-lg text-[10px] font-bold font-mono tracking-wider transition cursor-pointer"
+                        >
+                          <Mail className="w-3.5 h-3.5" /> Direct Email
+                        </a>
+                        {!isReplied && (
+                          <button
+                            onClick={() => setShowReplyId(showReplyId === fb.id ? null : fb.id)}
+                            className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-teal-600 border border-teal-700 hover:bg-teal-700 text-white rounded-lg text-[10px] font-bold font-mono tracking-wider transition cursor-pointer"
+                          >
+                            <Reply className="w-3.5 h-3.5" /> In-App Reply
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {showReplyId === fb.id && !isReplied && (
+                      <div className="bg-white border border-teal-150 p-3 rounded-xl space-y-2 animate-in slide-in-from-top-1">
+                         <label className="text-[9px] uppercase font-bold text-teal-600 block tracking-wider font-mono">
+                           Provide an in-app resolution
+                         </label>
+                         <div className="flex gap-2">
+                           <input
+                             type="text"
+                             placeholder="e.g. Thanks for reporting this! Bug fixed in latest build."
+                             value={replyTextMap[fb.id] || ''}
+                             onChange={e => setReplyTextMap(prev => ({ ...prev, [fb.id]: e.target.value }))}
+                             className="flex-1 bg-gray-50 border border-gray-200 focus:border-teal-500 focus:bg-white text-xs font-semibold py-1.5 px-3 rounded-lg outline-none transition"
+                           />
+                           <button
+                             onClick={() => handleReplyToFeedback(fb.id, fb.email)}
+                             className="bg-teal-600 text-white text-[10px] uppercase font-bold px-3 py-1.5 rounded-lg border-b-2 border-teal-800 cursor-pointer hover:bg-teal-700"
+                           >
+                             Log Reply
+                           </button>
+                         </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
       {activeSubTab === 'import' && (

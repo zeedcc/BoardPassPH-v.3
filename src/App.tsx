@@ -195,7 +195,7 @@ export default function App() {
           // Then, fetch live copy from Firestore
           try {
             const docRef = doc(db, 'profiles', emailKey);
-            const docSnap = await firestoreWithTimeout(getDoc(docRef), 3500);
+            const docSnap = await firestoreWithTimeout(getDoc(docRef));
             if (docSnap.exists()) {
               const fbProfile = docSnap.data() as UserProfile;
               setProfile(fbProfile);
@@ -204,7 +204,7 @@ export default function App() {
                 localStorage.setItem(`bp_notes_${emailKey}`, JSON.stringify(fbProfile.notes));
               }
             } else if (loadedProfile) {
-              await firestoreWithTimeout(setDoc(docRef, loadedProfile), 3500);
+              await firestoreWithTimeout(setDoc(docRef, loadedProfile));
             }
           } catch (fbErr) {
             console.warn("Could not sync live profile from Firestore on mount:", fbErr);
@@ -240,7 +240,7 @@ export default function App() {
         // Schedule a consolidated sync in 60 seconds to prevent reaching free tier quota limits
         syncTimeoutRef.current = setTimeout(() => {
           const syncEmail = next.email.trim().toLowerCase();
-          firestoreWithTimeout(setDoc(doc(db, 'profiles', syncEmail), next), 4000)
+          firestoreWithTimeout(setDoc(doc(db, 'profiles', syncEmail), next))
             .then(() => {
               setSyncStatus('synced');
             })
@@ -266,7 +266,7 @@ export default function App() {
         throw new Error("Profile email is missing.");
       }
       const docRef = doc(db, 'profiles', syncEmail);
-      await firestoreWithTimeout(setDoc(docRef, profile), 4500);
+      await firestoreWithTimeout(setDoc(docRef, profile));
       await new Promise(resolve => setTimeout(resolve, 650));
       setSyncStatus('synced');
       alert("✅ Review session data safely backed up to Google Cloud Firestore. Your progress, flashcards, and notes are now synchronized across all your devices!");
@@ -349,7 +349,7 @@ export default function App() {
     // Always attempt live Firebase lookup to ensure secure validation matches cloud state
     try {
       const docRef = doc(db, 'profiles', emailKey);
-      const docSnap = await firestoreWithTimeout(getDoc(docRef), 3500);
+      const docSnap = await firestoreWithTimeout(getDoc(docRef));
       if (docSnap.exists()) {
         loadedProfile = docSnap.data() as UserProfile;
       }
@@ -400,7 +400,7 @@ export default function App() {
     let exists = false;
     try {
       const docRef = doc(db, 'profiles', emailKey);
-      const docSnap = await firestoreWithTimeout(getDoc(docRef), 3500);
+      const docSnap = await firestoreWithTimeout(getDoc(docRef));
       if (docSnap.exists()) {
         exists = true;
       }
@@ -422,7 +422,7 @@ export default function App() {
 
     try {
       const docRef = doc(db, 'profiles', emailKey);
-      await firestoreWithTimeout(setDoc(docRef, newProfile), 3500);
+      await firestoreWithTimeout(setDoc(docRef, newProfile));
     } catch (err) {
       console.warn("Failed syncing new profile to storage, using local persistence:", err);
     }
@@ -993,7 +993,7 @@ export default function App() {
       <div className="max-w-7xl w-full mx-auto px-4 md:px-6 pt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Responsive Mobile Drawer / Sidebar button */}
-        <div className="lg:col-span-12 flex justify-between items-center lg:hidden bg-white p-3.5 border border-gray-200/50 rounded-2xl shadow-xs select-none">
+        <div className="lg:col-span-12 flex justify-between items-center lg:hidden bg-white p-3.5 border border-gray-200/50 rounded-2xl shadow-xs select-none min-w-0">
           <button
             onClick={() => setMobileMenuOpen(prev => !prev)}
             className="flex items-center gap-2 text-pine font-bold uppercase tracking-wider text-xs bg-foam px-3 py-1.5 rounded-xl border border-pine/5 cursor-pointer"
@@ -1099,7 +1099,7 @@ export default function App() {
         </div>
 
         {/* Core Main Panel */}
-        <div className="lg:col-span-9 space-y-6">
+        <div className="lg:col-span-9 space-y-6 min-w-0">
 
           {/* XP milestone bars */}
           <RpgBar 

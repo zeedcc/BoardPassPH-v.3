@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { Mail, MessageSquare, Send, ShieldAlert, Sparkles, AlertCircle, CheckCircle2, Star } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mail, MessageSquare, Send, ShieldAlert, Sparkles, AlertCircle, CheckCircle2, Star, Clock } from 'lucide-react';
 import { UserProfile } from '../types';
-import { db } from '../firebase';
-import { collection, doc, setDoc } from 'firebase/firestore';
+import { db, firestoreWithTimeout } from '../firebase';
+import { collection, doc, setDoc, getDocs, query, where } from 'firebase/firestore';
 
 interface FeedbackPanelProps {
   profile: UserProfile;
@@ -21,6 +21,28 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ profile }) => {
   const [lastSubmittedMsg, setLastSubmittedMsg] = useState('');
   const [lastSubmittedTopicText, setLastSubmittedTopicText] = useState('');
   const [lastSubmittedRatingVal, setLastSubmittedRatingVal] = useState(5);
+
+  const [pastFeedbacks, setPastFeedbacks] = useState<any[]>([]);
+  const [loadingPastFeedbacks, setLoadingPastFeedbacks] = useState(false);
+
+  useEffect(() => {
+    const fetchPastFeedbacks = async () => {
+      setLoadingPastFeedbacks(true);
+      try {
+        const q = query(collection(db, 'feedbacks'), where('email', '==', profile.email));
+        const snapshot = await firestoreWithTimeout(getDocs(q));
+        const list: any[] = [];
+        snapshot.forEach((doc: any) => list.push({ id: doc.id, ...doc.data() }));
+        list.sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+        setPastFeedbacks(list);
+      } catch (err) {
+        console.warn("Failed to fetch past feedbacks:", err);
+      } finally {
+        setLoadingPastFeedbacks(false);
+      }
+    };
+    fetchPastFeedbacks();
+  }, [profile.email]);
 
   const TOPICS = [
     { id: 'bug', name: 'Software Bug & Interface Lag', emoji: '🐛' },
@@ -56,7 +78,7 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ profile }) => {
 
     try {
       const ref = doc(collection(db, 'feedbacks'));
-      await setDoc(ref, feedbackPayload);
+      await firestoreWithTimeout(setDoc(ref, feedbackPayload));
 
       try {
         await fetch('/api/submit-feedback', {
@@ -71,6 +93,11 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ profile }) => {
       setSuccessInfo('💚 Secure receipt confirmed! Your feedback has been synchronized to our Firebase Cloud Database. Please choose one of the options below to also draft or copy the parameters directly to dsmind.pmle@gmail.com.');
       setMessage('');
       setTopic('bug');
+      // Refresh the inbox locally!
+      setPastFeedbacks([{
+        id: ref.id,
+        ...feedbackPayload
+      }, ...pastFeedbacks]);
     } catch (err: any) {
       console.warn('Cloud feedback submission failed, utilizing secure local failover:', err);
       // Fallback local storage log
@@ -428,6 +455,43 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ profile }) => {
           </form>
         </div>
       </div>
+
+      {/* PAST FEEDBACK INBOX */}
+      {pastFeedbacks.length > 0 && (
+        <div className="bg-white border border-pine/10 rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-pine/5 pb-3">
+             <MessageSquare className="w-5 h-5 text-pine" />
+             <h3 className="text-sm font-bold text-pine uppercase tracking-wider font-mono">
+               Your Feedback / Help Tickets ({pastFeedbacks.length})
+             </h3>
+          </div>
+          
+          <div className="space-y-4">
+            {pastFeedbacks.map((fb) => (
+              <div key={fb.id} className="border border-pine/15 rounded-xl p-4 bg-gray-50/50">
+                <div className="flex justify-between items-start gap-3">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap text-[10px] font-mono">
+                    <span className="bg-pine/10 text-pine px-2 py-0.5 rounded font-black tracking-wider uppercase">{fb.topic}</span>
+                    <span className="text-amber-600 font-bold">{fb.rating} Stars</span>
+                    <span className="text-gray-400 flex items-center gap-1"><Clock className="w-3 h-3"/> {fb.timestamp ? new Date(fb.timestamp).toLocaleString() : ''}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-700 font-medium bg-white p-3 rounded-lg border border-gray-150">
+                  {fb.message}
+                </p>
+                {fb.adminReply && (
+                  <div className="mt-3 bg-teal-50 border border-teal-100 rounded-lg p-3">
+                    <span className="text-[9px] uppercase font-bold text-teal-800 font-mono flex items-center gap-1 mb-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Support Team Reply:
+                    </span>
+                    <p className="text-xs text-teal-950 font-medium">{fb.adminReply}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

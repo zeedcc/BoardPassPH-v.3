@@ -286,7 +286,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
         try {
           const docRef = doc(db, 'liveRecallSessions', code);
-          const docSnap = await firestoreWithTimeout(getDoc(docRef), 4000);
+          const docSnap = await firestoreWithTimeout(getDoc(docRef));
 
           if (!docSnap.exists()) {
             alert("The shared Recall lobby was not found. It may have expired or been deleted.");
@@ -317,7 +317,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
               text: `${myName} entered the Active Recall room via share link!`,
               timestamp: new Date().toLocaleTimeString()
             })
-          }), 4000);
+          }));
 
           subscribeToLiveRecallSession(code);
         } catch (err) {
@@ -334,9 +334,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const fetchPublicDecks = async () => {
     try {
       const q = query(collection(db, 'flashcardDecks'), where('isPublic', '==', true));
-      const querySnapshot = await getDocs(q);
+      const querySnapshot = await firestoreWithTimeout(getDocs(q));
       const items: FlashcardDeck[] = [];
-      querySnapshot.forEach((doc) => {
+      querySnapshot.forEach((doc: any) => {
         items.push({ id: doc.id, ...doc.data() } as FlashcardDeck);
       });
       if (items.length > 0) {
@@ -995,7 +995,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
          setActiveSessionRoom(newRoom);
          setActiveSubTab('live-recall');
       } else {
-         await firestoreWithTimeout(setDoc(doc(db, 'liveRecallSessions', roomId), newRoom), 4000);
+         await firestoreWithTimeout(setDoc(doc(db, 'liveRecallSessions', roomId), newRoom));
          // Subscribe real-time
          subscribeToLiveRecallSession(roomId);
       }
@@ -1040,7 +1040,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
 
     try {
       const docRef = doc(db, 'liveRecallSessions', code);
-      const docSnap = await firestoreWithTimeout(getDoc(docRef), 4000);
+      const docSnap = await firestoreWithTimeout(getDoc(docRef));
 
       if (!docSnap.exists()) {
         alert("Active Recall lobby not found. Double check your code (e.g. room-123456).");
@@ -1072,7 +1072,7 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
           text: `${myName} stepped into the Active Recall room!`,
           timestamp: new Date().toLocaleTimeString()
         })
-      }), 4000);
+      }));
 
       subscribeToLiveRecallSession(code);
     } catch (err) {
@@ -1970,9 +1970,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     // Delete our outgoing signaling docs from Firestore so peers know we left
     try {
       const sigColRef = collection(db, 'liveRecallSessions', activeSessionRoom.id, 'signaling');
-      const sigSnap = await getDocs(sigColRef);
+      const sigSnap = await firestoreWithTimeout(getDocs(sigColRef));
       const batch = writeBatch(db);
-      sigSnap.docs.forEach(d => {
+      sigSnap.docs.forEach((d: any) => {
         if (d.id.startsWith(`${myEmailKey}__to__`)) batch.delete(d.ref);
       });
       await batch.commit();

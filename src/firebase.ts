@@ -8,14 +8,19 @@ import {
   onAuthStateChanged,
   signInAnonymously,
 } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer, Firestore } from 'firebase/firestore';
+import { doc, getDocFromServer, Firestore, initializeFirestore } from 'firebase/firestore';
 
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-const customDb = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || undefined);
-const defaultDb = getFirestore(app);
+const customDb = initializeFirestore(app, {
+  experimentalForceLongPolling: true
+}, (firebaseConfig as any).firestoreDatabaseId || undefined);
+
+const defaultDb = initializeFirestore(app, {
+  experimentalForceLongPolling: true
+});
 
 let activeDb = customDb;
 
@@ -138,10 +143,10 @@ async function testConnection() {
   }
 }
 
-export async function firestoreWithTimeout<T>(operation: Promise<T>, timeoutMs = 4000): Promise<T> {
+export async function firestoreWithTimeout<T>(operation: Promise<T>, timeoutMs = 12000): Promise<T> {
   return Promise.race([
     operation,
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Firestore operation timed out')), timeoutMs))
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Firestore operation timed out after ${timeoutMs}ms`)), timeoutMs))
   ]) as Promise<T>;
 }
 

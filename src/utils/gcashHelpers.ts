@@ -1,4 +1,4 @@
-import { db } from '../firebase';
+import { db, firestoreWithTimeout } from '../firebase';
 import { collection, doc, setDoc, getDocs, getDoc, query, where, updateDoc } from 'firebase/firestore';
 import { GCashPaymentRequest, UserProfile } from '../types';
 
@@ -48,7 +48,7 @@ export async function getGCashRequestsForUser(email: string): Promise<GCashPayme
   // Try Firebase Firestore first
   try {
     const q = query(collection(db, 'gcash_requests'), where('email', '==', normEmail));
-    const snapshot = await getDocs(q);
+    const snapshot = await firestoreWithTimeout(getDocs(q));
     if (!snapshot.empty) {
       const fbReqs: GCashPaymentRequest[] = [];
       snapshot.forEach(doc => {
@@ -78,7 +78,7 @@ export async function getGCashRequestsForUser(email: string): Promise<GCashPayme
 // Get all requests (for administrator)
 export async function getAllGCashRequests(): Promise<GCashPaymentRequest[]> {
   try {
-    const snapshot = await getDocs(collection(db, 'gcash_requests'));
+    const snapshot = await firestoreWithTimeout(getDocs(collection(db, 'gcash_requests')));
     if (!snapshot.empty) {
       const fbReqs: GCashPaymentRequest[] = [];
       snapshot.forEach(doc => {
