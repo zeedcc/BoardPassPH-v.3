@@ -6,7 +6,7 @@ import {
   ArrowLeft, Copy, Trophy, RefreshCw, ThumbsUp, MessageSquare, BookOpen, AlertCircle,
   Mic, MicOff, Volume2, CircleDot, Radio, Square, Zap, Key, Flame, Heart, ChevronDown
 } from 'lucide-react';
-import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc as firestoreUpdateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db, firestoreWithTimeout, firebaseStatus } from '../firebase';
 import { UserProfile, Flashcard, FlashcardDeck, GroupRecallRoom } from '../types';
 import { GroupVideoChat } from './GroupVideoChat';
@@ -206,6 +206,28 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
   const [localVoiceVolume, setLocalVoiceVolume] = useState(0); // 0 to 100
   // Refs to avoid stale closures in requestAnimationFrame callback
   const voiceLoungeConnectedRef = useRef(false);
+
+  // INTERCEPTOR: Prevent Firebase quota exhaustion in Solo Mode
+  const updateDoc = async (docRef: any, data: any) => {
+    if (isSoloMode) {
+      setActiveSessionRoom(prev => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        
+        // Shallow merge simple fields
+        Object.keys(data).forEach(k => {
+           if (k !== 'chatMessages') {
+             (next as any)[k] = data[k];
+           }
+        });
+        
+        return next;
+      });
+      return Promise.resolve();
+    }
+    return firestoreUpdateDoc(docRef, data);
+  };
+
   const isVoiceMutedRef = useRef(false);
   const isRecordingVoiceRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -969,10 +991,14 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
     };
 
     try {
-      await firestoreWithTimeout(setDoc(doc(db, 'liveRecallSessions', roomId), newRoom), 4000);
-      
-      // Subscribe real-time
-      subscribeToLiveRecallSession(roomId);
+      if (forceSolo) {
+         setActiveSessionRoom(newRoom);
+         setActiveSubTab('live-recall');
+      } else {
+         await firestoreWithTimeout(setDoc(doc(db, 'liveRecallSessions', roomId), newRoom), 4000);
+         // Subscribe real-time
+         subscribeToLiveRecallSession(roomId);
+      }
     } catch (err) {
       console.error("Failed to host Active Recall room:", err);
       alert("Error initiating multiplayer lobby. Try again as peer.");
@@ -1056,6 +1082,23 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
       setSessionRoomLoading(false);
     }
   };
+
+  // Solo mode reactivity: simulate onSnapshot auto-reveal behavior when activeSessionRoom updates
+  useEffect(() => {
+    if (isSoloMode && activeSessionRoom) {
+      const keys = Object.keys(activeSessionRoom.participants);
+      if (keys.length > 0) {
+        const allSubmitted = keys.every(k => activeSessionRoom.participants[k].submittedAnswer);
+        setPlayersDoneSubmitting(allSubmitted || activeSessionRoom.status === 'reveal' || activeSessionRoom.status === 'finished');
+
+        if (allSubmitted && activeSessionRoom.status === 'active' && activeSessionRoom.hostEmail === profile.email) {
+          handleHostRevealAnswerBackFromSnapshot(activeSessionRoom.id);
+        }
+      } else {
+        setPlayersDoneSubmitting(false);
+      }
+    }
+  }, [activeSessionRoom, isSoloMode, profile.email]);
 
   const subscribeToLiveRecallSession = (roomId: string) => {
     if (roomUnsubscribeRef.current) {

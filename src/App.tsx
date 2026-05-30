@@ -237,7 +237,7 @@ export default function App() {
         }
         
         setSyncStatus('syncing');
-        // Schedule a consolidated sync in 6 seconds
+        // Schedule a consolidated sync in 60 seconds to prevent reaching free tier quota limits
         syncTimeoutRef.current = setTimeout(() => {
           const syncEmail = next.email.trim().toLowerCase();
           firestoreWithTimeout(setDoc(doc(db, 'profiles', syncEmail), next), 4000)
@@ -248,7 +248,7 @@ export default function App() {
               console.warn('Failed to sync profile to Firestore in background after debounce:', err);
               setSyncStatus('synced');
             });
-        }, 6000);
+        }, 60000);
       }
       return next;
     });
