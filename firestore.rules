@@ -81,6 +81,9 @@ service cloud.firestore {
 
     match /groupRooms/{roomId} {
       allow read, write: if true;
+      match /signals/{document=**} {
+        allow read, write: if true;
+      }
     }
 
     match /flashcardDecks/{deckId} {

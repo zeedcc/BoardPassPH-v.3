@@ -24,7 +24,6 @@ import { LeaderboardPanel } from './components/LeaderboardPanel';
 import { WeightedCalculatorPanel } from './components/WeightedCalculatorPanel';
 import { AnnouncementsPanel } from './components/AnnouncementsPanel';
 import { ProfilePanel } from './components/ProfilePanel';
-import { GroupStudyPanel } from './components/GroupStudyPanel';
 import { FlashcardDecksPanel } from './components/FlashcardDecksPanel';
 import { DailyBoardChallenge } from './components/DailyBoardChallenge';
 import { TosTrackerPanel } from './components/TosTrackerPanel';
@@ -89,7 +88,7 @@ const isTabAllowed = (tabId: string, userTier: string, email?: string): boolean 
   }
 
   // Make the study planner, dsm5Disorders context, Group Study Arena, and TOS tracker suite fully available to all tiers
-  if (['planner', 'tos', 'dsm5Disorders', 'groupstudy', 'flashcards'].includes(tabId)) {
+  if (['planner', 'tos', 'dsm5Disorders', 'flashcards'].includes(tabId)) {
     return true;
   }
 
@@ -134,7 +133,7 @@ export default function App() {
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [loadingQuestion, setLoadingQuestion] = useState(false);
   const [selectedModel, setSelectedModel] = useState<'budget' | 'standard' | 'premium' | 'testbank'>('standard');
-  const [urlRoomId, setUrlRoomId] = useState<string | null>(null);
+
 
   // Forgot Password recovery states
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -151,11 +150,6 @@ export default function App() {
   // Auto detect url room code on startup
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const roomParam = params.get('room');
-    if (roomParam) {
-      setUrlRoomId(roomParam);
-      setActiveTab2('groupstudy');
-    }
     const flashcardParam = params.get('flashcardRoom');
     if (flashcardParam) {
       localStorage.setItem('bp_flashcard_join_room_id', flashcardParam);
@@ -624,7 +618,6 @@ export default function App() {
 
   const TABS = [
     { id: 'home', name: 'Student Dashboard', icon: CheckSquare, category: 'Main' },
-    { id: 'groupstudy', name: 'Group Study Arena', icon: Users, category: 'Main' },
     { id: 'flashcards', name: 'Recall & AI Flashcards', icon: Layers, category: 'Main' },
     { id: 'practice', name: 'Clinical Practice', icon: BookOpen, category: 'Main' },
     { id: 'mock', name: 'Simulated Exam', icon: Award, category: 'Main' },
@@ -1223,15 +1216,6 @@ export default function App() {
 
               <LeaderboardPanel profile={profile} />
             </div>
-          )}
-
-          {activeTab === 'groupstudy' && (
-            <GroupStudyPanel
-              profile={profile}
-              setProfile={updateProfileAndSave}
-              urlRoomId={urlRoomId}
-              clearUrlRoomId={() => setUrlRoomId(null)}
-            />
           )}
 
           {activeTab === 'flashcards' && (

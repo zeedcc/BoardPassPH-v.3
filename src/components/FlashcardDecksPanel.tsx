@@ -9,6 +9,7 @@ import {
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, onSnapshot, collection, query, where, getDocs, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db, firestoreWithTimeout, firebaseStatus } from '../firebase';
 import { UserProfile, Flashcard, FlashcardDeck, GroupRecallRoom } from '../types';
+import { GroupVideoChat } from './GroupVideoChat';
 
 interface FlashcardDecksPanelProps {
   profile: UserProfile;
@@ -2551,6 +2552,9 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
                 </div>
               )}
             </div>
+
+            {/* Injected Video/Audio WebRTC Engine for Live Interaction */}
+            <GroupVideoChat roomId={activeSessionRoom.id} userEmail={profile.email} />
           </div>
 
           {/* Leaderboards, participants tracking & Chat (right - 4 cols) */}

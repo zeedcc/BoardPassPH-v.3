@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Database, Plus, Trash2, CheckCircle, Clock, Check, X, AlertCircle, RefreshCw, Landmark, HelpCircle, BookOpen } from 'lucide-react';
+import { Shield, Database, Plus, Trash2, CheckCircle, Clock, Check, X, AlertCircle, RefreshCw, Landmark, HelpCircle, BookOpen, UploadCloud, FileJson } from 'lucide-react';
 import { SEED_QUESTIONS } from '../data/seedQuestions';
 import { UserProfile, GCashPaymentRequest } from '../types';
 import { getAllGCashRequests, approveGCashRequest, rejectGCashRequest } from '../utils/gcashHelpers';
@@ -13,7 +13,7 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentUser, setCurrentUser }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'questions' | 'billing' | 'users' | 'announcements'>('billing'); // Default to billing for the reviewee's convenience!
+  const [activeSubTab, setActiveSubTab] = useState<'questions' | 'billing' | 'users' | 'announcements' | 'import'>('billing'); // Default to billing for the reviewee's convenience!
   
   // Announcements Posting States
   const [annTitle, setAnnTitle] = useState('');
@@ -98,6 +98,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
   const [loadingBilling, setLoadingBilling] = useState(false);
   const [rejectionReasonMap, setRejectionReasonMap] = useState<Record<string, string>>({});
   const [showRejectInputId, setShowRejectInputId] = useState<string | null>(null);
+
+  // Import states
+  const [importStatus, setImportStatus] = useState<string>('');
+  const [importLoading, setImportLoading] = useState(false);
+
+  const handleImportJson = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportLoading(true);
+    setImportStatus('Reading file...');
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      // We expect data to be an array of objects or an object of objects
+      let profilesToImport: any[] = [];
+      if (Array.isArray(data)) {
+        profilesToImport = data;
+      } else if (typeof data === 'object') {
+        // Handle maps/collections exported like { "user1@email.com": { ... }, "user2@email.com": { ... } }
+        profilesToImport = Object.values(data);
+      }
+
+      if (profilesToImport.length === 0) {
+        setImportStatus('No profiles found in JSON.');
+        setImportLoading(false);
+        return;
+      }
+
+      setImportStatus(`Found ${profilesToImport.length} profiles. Importing...`);
+
+      let importedCount = 0;
+      for (const profile of profilesToImport) {
+        if (profile.email) {
+          const emailKey = profile.email.toLowerCase().trim();
+          await setDoc(doc(db, 'profiles', emailKey), profile, { merge: true });
+          importedCount++;
+          if (importedCount % 5 === 0) {
+            setImportStatus(`Importing... (${importedCount}/${profilesToImport.length})`);
+          }
+        }
+      }
+
+      setImportStatus(`Successfully imported ${importedCount} profiles!`);
+      // Reload the local users so they appear in the UI
+      loadLocalUsers();
+    } catch (err: any) {
+      console.error('Import error:', err);
+      setImportStatus(`Error: ${err.message}`);
+    } finally {
+      setImportLoading(false);
+      // clear the file input so it can be used again
+      e.target.value = '';
+    }
+  };
 
   // User Administration states
   const [localUsers, setLocalUsers] = useState<{ email: string; tier: string; totalXp: number; streak: number }[]>([]);
@@ -489,6 +546,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
             }`}
           >
             📢 Post Announcements ({customAnnouncements.length})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('import')}
+            className={`flex-1 px-2 py-2 rounded-lg transition duration-150 cursor-pointer ${
+              activeSubTab === 'import' 
+                ? 'bg-cream text-teal-950 font-black shadow-xs' 
+                : 'text-teal-200 hover:text-white'
+            }`}
+          >
+            📥 Import Data
           </button>
         </div>
       </div>
@@ -1139,6 +1206,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {activeSubTab === 'import' && (
+        <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6">
+          <div className="flex flex-col border-b border-gray-100 pb-4 gap-3">
+            <h4 className="font-heading font-black text-xs text-gray-500 uppercase tracking-widest flex items-center gap-1.5 font-mono">
+              <Database className="w-4 h-4 text-teal-700" />
+              Import Data (JSON)
+            </h4>
+            <p className="text-[10px] text-gray-400 font-mono">
+              Upload a JSON file containing user profiles to migrate the data directly into your current Firebase environment. This bypasses the need to have Google Cloud Platform export permissions since it reads raw JSON map outputs.
+            </p>
+          </div>
+
+          <div className="bg-gray-50 border border-dashed border-gray-300 rounded-2xl p-8 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-sm relative group cursor-pointer hover:border-teal-400 transition-colors">
+              <UploadCloud className="w-8 h-8 text-teal-600 group-hover:scale-110 transition-transform" />
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportJson}
+                disabled={importLoading}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                title="Select JSON File to Import"
+              />
+            </div>
+            
+            <div className="space-y-1">
+              <h5 className="text-xs font-bold text-gray-700 font-sans">
+                {importLoading ? 'Importing Data...' : 'Click or drop a JSON file here'}
+              </h5>
+              <p className="text-[10px] text-gray-400 font-mono">
+                Supports arrays of profiles or object-mapped collections
+              </p>
+            </div>
+
+            {importStatus && (
+              <div className={`mt-4 px-4 py-2 rounded-xl text-[10px] font-mono font-bold border ${
+                importStatus.includes('Error') || importStatus.includes('No profiles')
+                  ? 'bg-rose-50 border-rose-200 text-rose-700'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              }`}>
+                {importStatus}
+              </div>
+            )}
+          </div>
+          
+          <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 flex gap-3 text-blue-800">
+             <FileJson className="w-5 h-5 opacity-70 shrink-0" />
+             <div className="text-[10px] leading-relaxed font-mono">
+               <strong>Expected format:</strong> Expected to be a JSON array of profile objects (where each profile contains an <code className="bg-white/60 px-1 rounded">email</code> field), OR a dictionary map where values are profile objects. Existing user structures will be intelligently merged automatically to preserve state.
+             </div>
           </div>
         </div>
       )}

@@ -14,7 +14,7 @@ import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-const customDb = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+const customDb = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || undefined);
 const defaultDb = getFirestore(app);
 
 let activeDb = customDb;
@@ -104,7 +104,7 @@ async function testConnection() {
       console.log("Dynamically fall back to '(default)' database container.");
     } else {
       activeDb = customDb;
-      console.log(`Successfully connected to custom database: ${firebaseConfig.firestoreDatabaseId}`);
+      console.log(`Successfully connected to custom database: ${(firebaseConfig as any).firestoreDatabaseId}`);
     }
 
     if (typeof window !== 'undefined' && window.sessionStorage) {
