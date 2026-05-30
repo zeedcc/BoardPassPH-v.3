@@ -273,7 +273,7 @@ export default function App() {
     } catch (err: any) {
       console.warn("Manual cloud sync failed:", err);
       setSyncStatus('synced');
-      alert(`❌ Manual cloud sync failed: ${err?.message || String(err) || 'Unknown connection error'}. Make sure you are signed in and Firestore rules are deployed.`);
+      alert(`❌ Manual cloud sync failed: ${err?.message || String(err) || 'Unknown connection error'}. This might be due to a poor network connection or the Cloud Firestore daily write quota being exceeded on your current free tier.`);
     }
   };
 

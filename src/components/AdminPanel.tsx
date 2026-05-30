@@ -3,7 +3,7 @@ import { Shield, Database, Plus, Trash2, CheckCircle, Clock, Check, X, AlertCirc
 import { SEED_QUESTIONS } from '../data/seedQuestions';
 import { UserProfile, GCashPaymentRequest } from '../types';
 import { getAllGCashRequests, approveGCashRequest, rejectGCashRequest } from '../utils/gcashHelpers';
-import { db } from '../firebase';
+import { db, firestoreWithTimeout } from '../firebase';
 import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 
 interface AdminPanelProps {
@@ -49,7 +49,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
     setCustomAnnouncements(nextList);
     
     try {
-      await setDoc(doc(db, 'custom_announcements', newAnn.id), newAnn);
+      await firestoreWithTimeout(setDoc(doc(db, 'custom_announcements', newAnn.id), newAnn), 5000);
     } catch (err) {
       console.warn('Failed to post announcement on Firestore:', err);
     }
@@ -135,7 +135,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
       for (const profile of profilesToImport) {
         if (profile.email) {
           const emailKey = profile.email.toLowerCase().trim();
-          await setDoc(doc(db, 'profiles', emailKey), profile, { merge: true });
+          await firestoreWithTimeout(setDoc(doc(db, 'profiles', emailKey), profile, { merge: true }), 4000);
           importedCount++;
           if (importedCount % 5 === 0) {
             setImportStatus(`Importing... (${importedCount}/${profilesToImport.length})`);
@@ -216,9 +216,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
               const raw = localStorage.getItem(key);
               if (raw) {
                 const parsed = JSON.parse(raw);
-                // Sync to Firestore
-                await setDoc(doc(db, 'profiles', email), parsed);
-                console.log(`Synced local candidate profile into Firestore: ${email}`);
+                // Sync to Firestore (fire-and-forget to avoid hanging on quota limits)
+                setDoc(doc(db, 'profiles', email), parsed).catch(err => console.warn(`Silent sync failed:`, err));
+                console.log(`Queued sync for local candidate profile into Firestore: ${email}`);
                 // Add to gatheredMap
                 gatheredMap.set(email, {
                   email: parsed.email || email,
@@ -284,7 +284,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
 
     // Update in Firestore
     try {
-      await setDoc(doc(db, 'profiles', email.trim().toLowerCase()), clearedProfile);
+      await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), clearedProfile), 5000);
     } catch (fbErr) {
       console.warn('Could not post profile reset to Firestore:', fbErr);
     }
@@ -315,7 +315,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
         
         // Sync to cloud
         try {
-          await setDoc(doc(db, 'profiles', email.trim().toLowerCase()), parsed);
+          await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), parsed), 4000);
         } catch (fbErr) {
           console.warn('Could not sync user XP reset to Firestore:', fbErr);
         }
@@ -343,7 +343,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
         
         // Sync to cloud
         try {
-          await setDoc(doc(db, 'profiles', email.trim().toLowerCase()), parsed);
+          await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), parsed), 4000);
         } catch (fbErr) {
           console.warn('Could not elevated subscription in Firestore:', fbErr);
         }
@@ -369,7 +369,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onRefreshSeeds, currentU
 
     for (const email of emails) {
        try {
-         await setDoc(doc(db, 'profiles', email.trim().toLowerCase()), { tier: 'Clinical Suite' }, { merge: true });
+         await firestoreWithTimeout(setDoc(doc(db, 'profiles', email.trim().toLowerCase()), { tier: 'Clinical Suite' }, { merge: true }), 4000);
          console.log(`Successfully upgraded ${email}`);
        } catch (e) {
          console.error(`Failed to upgrade ${email}`, e);
