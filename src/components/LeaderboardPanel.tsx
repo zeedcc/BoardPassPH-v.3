@@ -99,7 +99,7 @@ export const LeaderboardPanel: React.FC<LeaderboardPanelProps> = ({ profile }) =
           theme: localUser.theme || 'strawberry-matcha',
           lastSynced: new Date().toISOString()
         };
-        await setDoc(userRef, payload);
+        await firestoreWithTimeout(setDoc(userRef, payload));
       }
 
       // Step B: Retrieve all registered national candidates synced on Firestore

@@ -18,20 +18,9 @@ const customDb = initializeFirestore(app, {
   experimentalForceLongPolling: true
 }, (firebaseConfig as any).firestoreDatabaseId || undefined);
 
-const defaultDb = initializeFirestore(app, {
-  experimentalForceLongPolling: true
-});
 
-let activeDb = customDb;
 
-export const db = new Proxy(customDb, {
-  get(target, prop, receiver) {
-    return Reflect.get(activeDb, prop, receiver);
-  },
-  set(target, prop, value, receiver) {
-    return Reflect.set(activeDb, prop, value, receiver);
-  }
-}) as Firestore;
+export const db = customDb;
 
 export const auth = getAuth();
 
@@ -62,85 +51,6 @@ export function initializeFirebase() {
       console.warn('Firebase Auth anonymous login failed:', err);
     }
   });
-
-  testConnection();
-}
-
-async function testConnection() {
-  if (typeof window !== 'undefined' && window.sessionStorage?.getItem('bp_firestore_connected')) {
-    const savedId = window.sessionStorage.getItem('bp_firestore_connected_id');
-    if (savedId === 'default') {
-      activeDb = defaultDb;
-    } else {
-      activeDb = customDb;
-    }
-    return;
-  }
-
-  console.log("Testing Firestore database connection discovery...");
-
-  const checkDbObj = async (dbInstance: Firestore, name: string) => {
-    try {
-      await getDocFromServer(doc(dbInstance, 'test', 'connection'));
-      return name;
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (
-        msg.includes('permission') || 
-        msg.includes('Permission') || 
-        msg.includes('rules') || 
-        msg.includes('unauthenticated')
-      ) {
-        return name;
-      }
-      throw err;
-    }
-  };
-
-  try {
-    const winnerName = await Promise.race([
-      checkDbObj(customDb, 'custom'),
-      checkDbObj(defaultDb, 'default'),
-      new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Discovery timed out')), 2500))
-    ]);
-
-    if (winnerName === 'default') {
-      activeDb = defaultDb;
-      console.log("Dynamically fall back to '(default)' database container.");
-    } else {
-      activeDb = customDb;
-      console.log(`Successfully connected to custom database: ${(firebaseConfig as any).firestoreDatabaseId}`);
-    }
-
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      window.sessionStorage.setItem('bp_firestore_connected', 'true');
-      window.sessionStorage.setItem('bp_firestore_connected_id', winnerName);
-    }
-  } catch (err: any) {
-    // Sequentially try custom, then fallback to default
-    try {
-      await checkDbObj(customDb, 'custom');
-      activeDb = customDb;
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        window.sessionStorage.setItem('bp_firestore_connected', 'true');
-        window.sessionStorage.setItem('bp_firestore_connected_id', 'custom');
-      }
-    } catch {
-      try {
-        await checkDbObj(defaultDb, 'default');
-        activeDb = defaultDb;
-        if (typeof window !== 'undefined' && window.sessionStorage) {
-          window.sessionStorage.setItem('bp_firestore_connected', 'true');
-          window.sessionStorage.setItem('bp_firestore_connected_id', 'default');
-        }
-      } catch (finalErr: any) {
-        const msg = finalErr?.message || String(finalErr);
-        console.error("All database connections failed, defaulting to default instance:", msg);
-        activeDb = defaultDb;
-        firebaseStatus.errorMessage = msg;
-      }
-    }
-  }
 }
 
 export async function firestoreWithTimeout<T>(operation: Promise<T>, timeoutMs = 12000): Promise<T> {
