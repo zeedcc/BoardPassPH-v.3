@@ -10,28 +10,12 @@ import {
 } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer, Firestore } from 'firebase/firestore';
 
-import firebaseConfigJson from '../firebase-applet-config.json';
+import firebaseConfig from '../firebase-applet-config.json';
 
-interface ExtendedFirebaseConfig {
-  apiKey: string;
-  authDomain: string;
-  databaseURL: string;
-  projectId: string;
-  storageBucket: string;
-  messagingSenderId: string;
-  appId: string;
-  measurementId?: string;
-  firestoreDatabaseId?: string;
-}
-
-const firebaseConfig = firebaseConfigJson as ExtendedFirebaseConfig;
 const app = initializeApp(firebaseConfig);
 
-const isCustomFirestoreConfigured = Boolean(firebaseConfig.firestoreDatabaseId?.trim());
+const customDb = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
 const defaultDb = getFirestore(app);
-const customDb = isCustomFirestoreConfigured
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : defaultDb;
 
 let activeDb = customDb;
 
@@ -61,10 +45,8 @@ export const firebaseStatus = {
   errorMessage: ''
 };
 
-export async function initializeFirebase() {
-  try {
-    await signInAnonymously(auth);
-  } catch (err: unknown) {
+export function initializeFirebase() {
+  signInAnonymously(auth).catch((err) => {
     const msg = err instanceof Error ? err.message : String(err);
     firebaseStatus.authAnonymousDisabled = msg.includes('auth/admin-restricted-operation') || msg.includes('admin-restricted-operation');
     firebaseStatus.authOperationNotAllowed = msg.includes('auth/operation-not-allowed') || msg.includes('operation-not-allowed');
@@ -74,9 +56,9 @@ export async function initializeFirebase() {
     } else {
       console.warn('Firebase Auth anonymous login failed:', err);
     }
-  }
+  });
 
-  await testConnection();
+  testConnection();
 }
 
 async function testConnection() {
@@ -122,9 +104,7 @@ async function testConnection() {
       console.log("Dynamically fall back to '(default)' database container.");
     } else {
       activeDb = customDb;
-      if (isCustomFirestoreConfigured) {
-        console.log(`Successfully connected to custom database: ${firebaseConfig.firestoreDatabaseId}`);
-      }
+      console.log(`Successfully connected to custom database: ${firebaseConfig.firestoreDatabaseId}`);
     }
 
     if (typeof window !== 'undefined' && window.sessionStorage) {

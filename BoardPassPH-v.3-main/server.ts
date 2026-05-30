@@ -110,30 +110,48 @@ Format your questions strictly based on the requested focal subject area and dif
 Return your response strictly in JSON matching the requested responseSchema. Options must always be exactly a 4-item array.`;
 
     const response = await generateContentWithFallback(ai, {
-      contents: `Generate a professional board exam MCQ question for the PmLE. Focus area: ${focusArea || 'General Psychology'}. Difficulty: ${difficulty || 'Medium'}. Source: ${source || 'General'}. ${contextInput} ${historyInput}`,
+      contents: `Formulate a simulated board exam question focusing on "${focusArea || 'any DSM-5 chapter'}" with difficulty level "${difficulty || 'random'}".${historyInput}${contextInput}`,
       config: {
         systemInstruction: sysInstruct,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
-          required: ['topic', 'vignette', 'options', 'answer', 'explanation'],
+          required: ['category', 'vignette', 'options', 'correctIndex', 'explanation'],
           properties: {
-            topic: { type: Type.STRING },
-            vignette: { type: Type.STRING },
-            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-            answer: { type: Type.STRING },
-            explanation: { type: Type.STRING }
+            category: {
+              type: Type.STRING,
+              description: 'The specific board topic category (e.g. DSM-5 Bipolar Disorders, Tests & Assessments, I/O HRM, Lifespan Stages)'
+            },
+            vignette: {
+              type: Type.STRING,
+              description: 'A realistic scenario or vignette representing a clinical psychiatric consultation, test suite briefing, or industrial work dispute.'
+            },
+            options: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: 'Exactly four plausible multiple choice answers representing clinical options.'
+            },
+            correctIndex: {
+              type: Type.INTEGER,
+              description: 'The zero-based index of the correct option (0 to 3)'
+            },
+            explanation: {
+              type: Type.STRING,
+              description: 'Extensive rationale detailing diagnostic criteria confirmations, subscore evaluations, pharmacology targets, and differential rule-outs.'
+            }
           }
         }
       }
     });
 
-    const question = JSON.parse(response.text || '{}');
-    return res.json({ question, isFallback: false });
-
+    const parsedJson = JSON.parse(response.text || '{}');
+    return res.json({
+      ...parsedJson,
+      isFallback: false
+    });
   } catch (err: any) {
-    console.error('Question generation error:', err.message || err);
-    return res.json({ isFallback: true, msg: err.message || 'Generation failed' });
+    console.error('Gemini question formulation error:', err.message || err);
+    return res.json({ isFallback: true, msg: err.message || 'API failed' });
   }
 });
 
@@ -168,59 +186,120 @@ Format your output in clean Markdown with clear paragraph structure.`,
 });
 
 app.post('/api/generate-deck', async (req, res) => {
-  const { textPayload, fileContent, fileName, cardIndex, totalCards, customApiKey } = req.body;
-  const ai = customApiKey && customApiKey.trim() !== ''
-    ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } })
-    : getGemini();
+  const { textPayload, fileContent, fileName, chunkIndex, totalChunks, customApiKey } = req.body;
+  const ai = customApiKey && customApiKey.trim() !== '' 
+      ? new GoogleGenAI({ apiKey: customApiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } }) 
+      : getGemini();
 
   if (!ai) {
-    return res.json({ isFallback: true, msg: 'No active Gemini key present.' });
+    return res.json({ 
+      isFallback: true, 
+      msg: 'No active Gemini key present. Please connect your developer key in Settings > Secrets.' 
+    });
   }
 
   try {
-    const MAX_CHAR_CAP = 15000;
+    let referenceInput = '';
+    const MAX_CHAR_CAP = 15000; // Optimal limit to fit within Vercel Hobby's 10-second limit
+
     let trimmedPayload = (textPayload || '').trim();
     let trimmedFile = (fileContent || '').trim();
 
-    if (trimmedPayload.length > MAX_CHAR_CAP) trimmedPayload = trimmedPayload.substring(0, MAX_CHAR_CAP);
-    if (trimmedFile.length > MAX_CHAR_CAP) trimmedFile = trimmedFile.substring(0, MAX_CHAR_CAP);
-
-    let referenceInput = '';
-    if (trimmedPayload) referenceInput += `\nPASTED NOTES:\n${trimmedPayload}\n`;
-    if (trimmedFile) referenceInput += `\nUPLOADED FILE (${fileName || 'document'}):\n${trimmedFile}\n`;
-
-    if (!referenceInput.trim()) {
-      return res.status(400).json({ error: 'No content provided.' });
+    if (trimmedPayload.length > MAX_CHAR_CAP) {
+      trimmedPayload = trimmedPayload.substring(0, MAX_CHAR_CAP) + '\n...[Truncated for speed & serverless limits]...';
+    }
+    if (trimmedFile.length > MAX_CHAR_CAP) {
+      trimmedFile = trimmedFile.substring(0, MAX_CHAR_CAP) + '\n...[Truncated for speed & serverless limits]...';
     }
 
-    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Generate exactly ONE MCQ flashcard from the provided material. This is card ${cardIndex} of ${totalCards}. Make it unique and different from what card numbers before it would have covered. Return a single JSON object with: id, front (clinical MCQ prompt), back (explanation/rationale), hint, options (array of exactly 4), correctOption (must match one of the options exactly).`;
+    if (trimmedPayload !== '') {
+      referenceInput += `\nPASTED NOTES/GUIDES:\n${trimmedPayload}\n`;
+    }
+    if (trimmedFile !== '') {
+      referenceInput += `\nUPLOADED FILE MATERIAL (${fileName || 'document'}):\n${trimmedFile}\n`;
+    }
+
+    if (referenceInput.trim() === '') {
+      return res.status(400).json({ error: 'Please provide either notes content or uploaded study files.' });
+    }
+
+    let progressContext = '';
+    if (chunkIndex && totalChunks) {
+      progressContext = `\nNote: You are currently processing section ${chunkIndex} of ${totalChunks} of the study material. Ensure your cards represent this section specifically.`;
+    }
+
+    const sysInstruct = `You are an expert clinical psychologist and professional reviewer for the Philippine Psychometrician Licensure Examination (PmLE). Your duty is to read the user's provided notes, study guides, or uploaded books, extract the most critical, high-yield concepts, terms, conditions, and theories, and convert them into strictly professional Multiple Choice Question (MCQ) board-exam type flashcards.
+CRITICAL: Do NOT generate identification or fill-in-the-blank questions. Every card MUST have exactly four multiple choice options.
+WHERE APPLICABLE, use realistic clinical case vignettes based on the notes as the question prompt to test applied clinical reasoning. ${progressContext}
+Format details:
+- Each card's 'front' must contain a professional, board-exam style clinical MCQ prompt or case vignette.
+- Provide exactly 4 multiple choice options inside the 'options' JSON array.
+- The 'correctOption' field MUST exactly match one of the options in the array.
+- Each card's 'back' must clearly state a concise, precise clinical explanation of why the correct option is right and the others are wrong (Rationale).
+- Each 'hint' is a small cognitive mnemonic or retrieval cue.
+
+Generate a highly optimized, high-yield deck of exactly 10 professional MCQ flashcards. Return your response strictly in JSON matching the requested responseSchema.`;
 
     const response = await generateContentWithFallback(ai, {
-      contents: `Generate flashcard #${cardIndex} of ${totalCards} from this material:\n${referenceInput}`,
+      contents: `Read all the following study references and formulate a comprehensive set of study flashcards covering every important note, definition, and concept: ${referenceInput}`,
       config: {
         systemInstruction: sysInstruct,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
-          required: ['id', 'front', 'back', 'options', 'correctOption'],
+          required: ['cards'],
           properties: {
-            id: { type: Type.STRING },
-            front: { type: Type.STRING },
-            back: { type: Type.STRING },
-            hint: { type: Type.STRING },
-            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-            correctOption: { type: Type.STRING }
+            cards: {
+              type: Type.ARRAY,
+              description: 'List of generated flashcard objects covering all important notes in the material',
+              items: {
+                type: Type.OBJECT,
+                required: ['id', 'front', 'back', 'options', 'correctOption'],
+                properties: {
+                  id: {
+                    type: Type.STRING,
+                    description: 'A unique short identifier for the flashcard'
+                  },
+                  front: {
+                    type: Type.STRING,
+                    description: 'The front side of the flashcard containing the active recall prompt or clinical vignette'
+                  },
+                  back: {
+                    type: Type.STRING,
+                    description: 'The reverse side of the flashcard holding the detailed, precise explanation'
+                  },
+                  hint: {
+                    type: Type.STRING,
+                    description: 'Optional retrieving cue or tip'
+                  },
+                  options: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: 'Exactly 4 multiple choice correct and distractor options'
+                  },
+                  correctOption: {
+                    type: Type.STRING,
+                    description: 'The exact string of the correct option from the options array'
+                  }
+                }
+              }
+            }
           }
         }
       }
     });
 
-    const card = JSON.parse(response.text || '{}');
-    return res.json({ card, isFallback: false });
-
+    const parsedData = JSON.parse(response.text || '{"cards":[]}');
+    return res.json({
+      cards: parsedData.cards || [],
+      isFallback: false
+    });
   } catch (err: any) {
-    console.error('Card generation error:', err.message || err);
-    return res.json({ isFallback: true, msg: err.message || 'Generation failed' });
+    console.error('Gemini flashcard generation error:', err.message || err);
+    return res.json({ 
+      isFallback: true, 
+      msg: err.message || 'API failed to parse or retrieve flashcard deck' 
+    });
   }
 });
 

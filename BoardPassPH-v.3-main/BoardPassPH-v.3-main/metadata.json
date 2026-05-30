@@ -1,0 +1,11 @@
+{
+  "name": "BoardPassPH",
+  "description": "A comprehensive prep portal for the Philippine Psychometrician Licensure Examination (PmLE), featuring DSM-5-TR mock tests, RPG-style progress tracking, test encyclopedias, weighted GWA calculators, and AI mnemonic study tools.",
+  "requestFramePermissions": [
+    "notifications",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -55,6 +55,10 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /test/{document} {
+      allow read, write: if true;
+    }
+
     match /feedbacks/{feedbackId} {
       allow read, write: if true;
     }
@@ -85,6 +89,9 @@ service cloud.firestore {
 
     match /liveRecallSessions/{sessionId} {
       allow read, write: if true;
+      match /signaling/{document=**} {
+        allow read, write: if true;
+      }
     }
   }
 }

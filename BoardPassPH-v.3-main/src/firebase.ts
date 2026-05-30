@@ -8,12 +8,42 @@ import {
   onAuthStateChanged,
   signInAnonymously,
 } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, Firestore } from 'firebase/firestore';
 
-import firebaseConfig from '../firebase-applet-config.json';
+import firebaseConfigJson from '../firebase-applet-config.json';
 
+interface ExtendedFirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  databaseURL: string;
+  projectId: string;
+  storageBucket: string;
+  messagingSenderId: string;
+  appId: string;
+  measurementId?: string;
+  firestoreDatabaseId?: string;
+}
+
+const firebaseConfig = firebaseConfigJson as ExtendedFirebaseConfig;
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+const isCustomFirestoreConfigured = Boolean(firebaseConfig.firestoreDatabaseId?.trim());
+const defaultDb = getFirestore(app);
+const customDb = isCustomFirestoreConfigured
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : defaultDb;
+
+let activeDb = customDb;
+
+export const db = new Proxy(customDb, {
+  get(target, prop, receiver) {
+    return Reflect.get(activeDb, prop, receiver);
+  },
+  set(target, prop, value, receiver) {
+    return Reflect.set(activeDb, prop, value, receiver);
+  }
+}) as Firestore;
+
 export const auth = getAuth();
 
 export {
@@ -50,24 +80,79 @@ export async function initializeFirebase() {
 }
 
 async function testConnection() {
-  try {
-    // Prevent redundant connection tests during active session
-    if (typeof window !== 'undefined' && window.sessionStorage?.getItem('bp_firestore_connected')) {
-      return;
+  if (typeof window !== 'undefined' && window.sessionStorage?.getItem('bp_firestore_connected')) {
+    const savedId = window.sessionStorage.getItem('bp_firestore_connected_id');
+    if (savedId === 'default') {
+      activeDb = defaultDb;
+    } else {
+      activeDb = customDb;
     }
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    return;
+  }
+
+  console.log("Testing Firestore database connection discovery...");
+
+  const checkDbObj = async (dbInstance: Firestore, name: string) => {
+    try {
+      await getDocFromServer(doc(dbInstance, 'test', 'connection'));
+      return name;
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      if (
+        msg.includes('permission') || 
+        msg.includes('Permission') || 
+        msg.includes('rules') || 
+        msg.includes('unauthenticated')
+      ) {
+        return name;
+      }
+      throw err;
+    }
+  };
+
+  try {
+    const winnerName = await Promise.race([
+      checkDbObj(customDb, 'custom'),
+      checkDbObj(defaultDb, 'default'),
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error('Discovery timed out')), 2500))
+    ]);
+
+    if (winnerName === 'default') {
+      activeDb = defaultDb;
+      console.log("Dynamically fall back to '(default)' database container.");
+    } else {
+      activeDb = customDb;
+      if (isCustomFirestoreConfigured) {
+        console.log(`Successfully connected to custom database: ${firebaseConfig.firestoreDatabaseId}`);
+      }
+    }
+
     if (typeof window !== 'undefined' && window.sessionStorage) {
       window.sessionStorage.setItem('bp_firestore_connected', 'true');
+      window.sessionStorage.setItem('bp_firestore_connected_id', winnerName);
     }
-  } catch (error) {
-    if (error instanceof Error) {
-      const msg = error.message;
-      firebaseStatus.errorMessage = msg;
-      if (msg.includes("Database '(default)' not found")) {
-        firebaseStatus.firestoreDatabaseMissing = true;
-        console.error('Firestore default database not found. Please create a Firestore database in your Firebase project.');
-      } else if (msg.includes('the client is offline')) {
-        console.error('Please check your Firebase configuration or network status.');
+  } catch (err: any) {
+    // Sequentially try custom, then fallback to default
+    try {
+      await checkDbObj(customDb, 'custom');
+      activeDb = customDb;
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem('bp_firestore_connected', 'true');
+        window.sessionStorage.setItem('bp_firestore_connected_id', 'custom');
+      }
+    } catch {
+      try {
+        await checkDbObj(defaultDb, 'default');
+        activeDb = defaultDb;
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          window.sessionStorage.setItem('bp_firestore_connected', 'true');
+          window.sessionStorage.setItem('bp_firestore_connected_id', 'default');
+        }
+      } catch (finalErr: any) {
+        const msg = finalErr?.message || String(finalErr);
+        console.error("All database connections failed, defaulting to default instance:", msg);
+        activeDb = defaultDb;
+        firebaseStatus.errorMessage = msg;
       }
     }
   }

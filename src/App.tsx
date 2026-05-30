@@ -24,6 +24,7 @@ import { LeaderboardPanel } from './components/LeaderboardPanel';
 import { WeightedCalculatorPanel } from './components/WeightedCalculatorPanel';
 import { AnnouncementsPanel } from './components/AnnouncementsPanel';
 import { ProfilePanel } from './components/ProfilePanel';
+import { GroupStudyPanel } from './components/GroupStudyPanel';
 import { FlashcardDecksPanel } from './components/FlashcardDecksPanel';
 import { DailyBoardChallenge } from './components/DailyBoardChallenge';
 import { TosTrackerPanel } from './components/TosTrackerPanel';
@@ -38,7 +39,7 @@ import { LifeStagesPanel } from './components/LifeStagesPanel';
 
 import { getRandomLocalQuestion } from './utils/questionGenerator';
 import { SEED_QUESTIONS } from './data/seedQuestions';
-import { db, firestoreWithTimeout, initializeFirebase } from './firebase';
+import { db, firestoreWithTimeout } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const THEME_OPTIONS = [
@@ -87,8 +88,8 @@ const isTabAllowed = (tabId: string, userTier: string, email?: string): boolean 
     return true;
   }
 
-  // Make the study planner, dsm5Disorders context, and TOS tracker suite fully available to all tiers
-  if (['planner', 'tos', 'dsm5Disorders', 'flashcards'].includes(tabId)) {
+  // Make the study planner, dsm5Disorders context, Group Study Arena, and TOS tracker suite fully available to all tiers
+  if (['planner', 'tos', 'dsm5Disorders', 'groupstudy', 'flashcards'].includes(tabId)) {
     return true;
   }
 
@@ -153,6 +154,7 @@ export default function App() {
     const roomParam = params.get('room');
     if (roomParam) {
       setUrlRoomId(roomParam);
+      setActiveTab2('groupstudy');
     }
     const flashcardParam = params.get('flashcardRoom');
     if (flashcardParam) {
@@ -170,9 +172,7 @@ export default function App() {
 
   // Load profile upon startup on this client
   useEffect(() => {
-    initializeFirebase().catch((err) => {
-      console.warn('Firebase initialization failed:', err);
-    });
+    import('./firebase').then(m => m.initializeFirebase());
     const initializeProfile = async () => {
       try {
         const lastEmail = localStorage.getItem('bp_last_logged_email');
@@ -271,17 +271,15 @@ export default function App() {
       if (!syncEmail) {
         throw new Error("Profile email is missing.");
       }
-      const sanitizedProfile = JSON.parse(JSON.stringify(profile));
       const docRef = doc(db, 'profiles', syncEmail);
-      await firestoreWithTimeout(setDoc(docRef, sanitizedProfile), 4500);
+      await firestoreWithTimeout(setDoc(docRef, profile), 4500);
       await new Promise(resolve => setTimeout(resolve, 650));
       setSyncStatus('synced');
       alert("✅ Review session data safely backed up to Google Cloud Firestore. Your progress, flashcards, and notes are now synchronized across all your devices!");
     } catch (err: any) {
-      console.error("Manual cloud sync failed:", err);
+      console.warn("Manual cloud sync failed:", err);
       setSyncStatus('synced');
-      const errorMessage = err?.message || String(err) || 'Unknown connection error';
-      alert(`❌ Manual cloud sync failed: ${errorMessage}. If you are still blocked, verify your Firestore security rules and anonymous authentication status, then check the browser console for the raw error.`);
+      alert(`❌ Manual cloud sync failed: ${err?.message || String(err) || 'Unknown connection error'}. Make sure you are signed in and Firestore rules are deployed.`);
     }
   };
 
@@ -626,6 +624,7 @@ export default function App() {
 
   const TABS = [
     { id: 'home', name: 'Student Dashboard', icon: CheckSquare, category: 'Main' },
+    { id: 'groupstudy', name: 'Group Study Arena', icon: Users, category: 'Main' },
     { id: 'flashcards', name: 'Recall & AI Flashcards', icon: Layers, category: 'Main' },
     { id: 'practice', name: 'Clinical Practice', icon: BookOpen, category: 'Main' },
     { id: 'mock', name: 'Simulated Exam', icon: Award, category: 'Main' },
@@ -1224,6 +1223,15 @@ export default function App() {
 
               <LeaderboardPanel profile={profile} />
             </div>
+          )}
+
+          {activeTab === 'groupstudy' && (
+            <GroupStudyPanel
+              profile={profile}
+              setProfile={updateProfileAndSave}
+              urlRoomId={urlRoomId}
+              clearUrlRoomId={() => setUrlRoomId(null)}
+            />
           )}
 
           {activeTab === 'flashcards' && (

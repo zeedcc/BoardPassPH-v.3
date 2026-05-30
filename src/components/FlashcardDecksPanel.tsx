@@ -244,29 +244,8 @@ export const FlashcardDecksPanel: React.FC<FlashcardDecksPanelProps> = ({ profil
         localStorage.setItem(`bp_flashcards_${profile.email}`, JSON.stringify([]));
       }
     }
+    fetchPublicDecks();
   }, [profile.email]);
-
-  // Live-sync public community flashcard decks across all users
-  useEffect(() => {
-    const publicDecksQuery = query(collection(db, 'flashcardDecks'), where('isPublic', '==', true));
-    const unsubscribe = onSnapshot(publicDecksQuery, (querySnapshot) => {
-      const items: FlashcardDeck[] = [];
-      querySnapshot.forEach((doc) => {
-        items.push({ id: doc.id, ...doc.data() } as FlashcardDeck);
-      });
-
-      if (items.length > 0) {
-        setPublicDecks([...SAMPLE_DECKS, ...items]);
-      } else {
-        setPublicDecks(SAMPLE_DECKS);
-      }
-    }, (err) => {
-      console.warn("Live community deck listener failed, falling back to sample decks:", err);
-      setPublicDecks(SAMPLE_DECKS);
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   // Auto-join shared flashcard rooms from URL query param
   useEffect(() => {
